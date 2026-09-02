@@ -69,18 +69,31 @@ async function renderDocxFirstPage(file: File): Promise<string> {
   ]);
   const html2canvas = html2canvasModule.default;
 
-  const host = document.createElement("div");
-  host.style.position = "fixed";
-  host.style.left = "-10000px";
-  host.style.top = "0";
-  host.style.width = "816px";
-  host.style.background = "#ffffff";
-  document.body.appendChild(host);
+  // Render inside an isolated iframe so the app's stylesheet (oklch tokens,
+  // resets) cannot leak into the document rendering or confuse html2canvas.
+  const frame = document.createElement("iframe");
+  frame.setAttribute("aria-hidden", "true");
+  frame.style.position = "fixed";
+  frame.style.left = "-10000px";
+  frame.style.top = "0";
+  frame.style.width = "900px";
+  frame.style.height = "1200px";
+  frame.style.border = "0";
+  document.body.appendChild(frame);
 
   try {
+    const frameDoc = frame.contentDocument;
+    if (!frameDoc) throw new Error("iframe unavailable");
+    frameDoc.open();
+    frameDoc.write(
+      '<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#ffffff;font-family:Arial,Helvetica,sans-serif;}</style></head><body><div id="host"></div></body></html>',
+    );
+    frameDoc.close();
+    const host = frameDoc.getElementById("host") as HTMLElement;
+
     await renderAsync(await file.arrayBuffer(), host, undefined, {
       className: "docx-render",
-      inWrapper: true,
+      inWrapper: false,
       ignoreWidth: false,
       ignoreHeight: false,
       breakPages: true,
@@ -88,7 +101,8 @@ async function renderDocxFirstPage(file: File): Promise<string> {
     });
 
     const firstPage =
-      (host.querySelector(".docx") as HTMLElement | null) ?? (host.firstElementChild as HTMLElement);
+      (host.querySelector("section.docx-render") as HTMLElement | null) ??
+      (host.firstElementChild as HTMLElement | null);
     if (!firstPage) throw new Error("empty render");
 
     const canvas = await html2canvas(firstPage, {
@@ -96,6 +110,7 @@ async function renderDocxFirstPage(file: File): Promise<string> {
       scale: 2,
       logging: false,
       useCORS: true,
+      windowWidth: 900,
     });
 
     // Crop to a single page height if the document rendered longer.
@@ -110,7 +125,7 @@ async function renderDocxFirstPage(file: File): Promise<string> {
     ctx.drawImage(canvas, 0, 0);
     return out.toDataURL("image/jpeg", 0.9);
   } finally {
-    host.remove();
+    frame.remove();
   }
 }
 

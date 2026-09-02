@@ -34,8 +34,8 @@ function friendlyGmailError(status: number, body: string): string {
   if (status === 429 || lower.includes("rate") || lower.includes("quota")) {
     return "Gmail rejected the request because the sending limit was reached. Please try again in a few minutes.";
   }
-  if (status === 413) {
-    return "The message is too large for Gmail. Please use a smaller document.";
+  if (status === 413 || lower.includes("too large") || lower.includes("entity too large")) {
+    return "Gmail rejected the email because the attachments exceed Gmail's 25 MB limit per email. Please remove some files and send the rest separately.";
   }
   return `Gmail could not send the email (error ${status}). ${body.slice(0, 300)}`;
 }
@@ -61,17 +61,17 @@ export const getGmailStatus = createServerFn({ method: "GET" })
     }
   });
 
-const sendSchema = z.object({
-  recipient: z.string().email("Please enter a valid recipient email address."),
-  subject: z.string().min(1).max(300),
-  documentName: z.string().max(200).default(""),
-  referenceNo: z.string().max(100).optional().nullable(),
+const fileSchema = z.object({
   fileName: z.string().min(1).max(255),
-  fileKind: z.enum(["PDF", "DOCX"]),
   fileMime: z.string().min(1).max(200),
   fileBase64: z.string().min(1),
-  previewBase64: z.string().nullable().optional(),
-  previewMime: z.string().default("image/png"),
+});
+
+const sendSchema = z.object({
+  recipient: z.string().trim().email("Please enter a valid recipient email address."),
+  subject: z.string().trim().min(1).max(300),
+  referenceNo: z.string().max(100).optional().nullable(),
+  files: z.array(fileSchema).min(1, "Please add at least one file.").max(50),
 });
 
 export const sendDocument = createServerFn({ method: "POST" })
@@ -82,18 +82,12 @@ export const sendDocument = createServerFn({ method: "POST" })
 
     const { data: settings } = await supabase
       .from("app_settings")
-      .select("footer_image_data_url, sender_name, body_intro, max_upload_mb")
+      .select("footer_image_data_url, sender_name, body_intro")
       .eq("user_id", userId)
       .maybeSingle();
 
     const senderName = settings?.sender_name ?? "Students Graphics";
     const intro = settings?.body_intro ?? "Please find the scanned document as requested.";
-    const maxBytes = (settings?.max_upload_mb ?? 20) * 1024 * 1024;
-
-    const fileBytes = Math.floor((data.fileBase64.length * 3) / 4);
-    if (fileBytes > maxBytes) {
-      throw new Error(`The document is larger than the ${settings?.max_upload_mb ?? 20} MB limit.`);
-    }
 
     // Footer image: settings override, otherwise the bundled default banner.
     let footerBase64: string | null = null;
@@ -122,18 +116,19 @@ export const sendDocument = createServerFn({ method: "POST" })
       }
     }
 
-    const previewCid = `preview_${crypto.randomUUID()}@studentsgraphics`;
     const footerCid = `footer_${crypto.randomUUID()}@studentsgraphics`;
-    const fileName = safeFilename(data.fileName);
+    const files = data.files.map((f) => ({
+      name: safeFilename(f.fileName),
+      size: Math.floor((f.fileBase64.length * 3) / 4),
+      mime: f.fileMime,
+      base64: f.fileBase64,
+    }));
 
     const templateInput = {
       senderName,
       intro,
-      documentName: data.documentName || fileName,
-      fileName,
-      fileKind: data.fileKind,
       referenceNo: data.referenceNo ?? null,
-      previewSrc: data.previewBase64 ? `cid:${previewCid}` : null,
+      files: files.map((f) => ({ name: f.name, size: f.size })),
       footerSrc: footerBase64 ? `cid:${footerCid}` : null,
     };
 
@@ -143,31 +138,10 @@ export const sendDocument = createServerFn({ method: "POST" })
       subject: data.subject,
       html: buildEmailHtml(templateInput),
       text: buildPlainText(templateInput),
-      inlineImages: [
-        ...(data.previewBase64
-          ? [
-              {
-                cid: previewCid,
-                contentType: data.previewMime || "image/png",
-                base64: data.previewBase64,
-                filename: "document-preview.png",
-              },
-            ]
-          : []),
-        ...(footerBase64
-          ? [
-              {
-                cid: footerCid,
-                contentType: footerMime,
-                base64: footerBase64,
-                filename: "footer.png",
-              },
-            ]
-          : []),
-      ],
-      attachments: [
-        { filename: fileName, contentType: data.fileMime, base64: data.fileBase64 },
-      ],
+      inlineImages: footerBase64
+        ? [{ cid: footerCid, contentType: footerMime, base64: footerBase64, filename: "footer.png" }]
+        : [],
+      attachments: files.map((f) => ({ filename: f.name, contentType: f.mime, base64: f.base64 })),
     });
 
     let senderEmail: string | null = null;
@@ -180,11 +154,12 @@ export const sendDocument = createServerFn({ method: "POST" })
       senderEmail = null;
     }
 
+    const filenameSummary = files.map((f) => f.name).join(", ");
     const recordHistory = async (status: string, errorMessage: string | null) => {
       await supabase.from("send_history").insert({
         user_id: userId,
         recipient: data.recipient,
-        filename: fileName,
+        filename: filenameSummary,
         subject: data.subject,
         status,
         error_message: errorMessage,
@@ -224,4 +199,16 @@ export const sendDocument = createServerFn({ method: "POST" })
       senderEmail,
       sentAt: new Date().toISOString(),
     };
+  });
+
+/** Delete every history row belonging to the signed-in user. */
+export const clearHistory = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { error, count } = await context.supabase
+      .from("send_history")
+      .delete({ count: "exact" })
+      .eq("user_id", context.userId);
+    if (error) throw new Error("Could not clear the history. Please try again.");
+    return { deleted: count ?? 0 };
   });

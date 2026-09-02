@@ -6,8 +6,6 @@ export type AppSettings = {
   subject_template: string;
   body_intro: string;
   sender_name: string;
-  max_upload_mb: number;
-  allowed_types: string[];
 };
 
 export const DEFAULT_SETTINGS: Omit<AppSettings, "user_id"> = {
@@ -15,14 +13,12 @@ export const DEFAULT_SETTINGS: Omit<AppSettings, "user_id"> = {
   subject_template: "Scanned Document - {filename}",
   body_intro: "Please find the scanned document as requested.",
   sender_name: "Students Graphics",
-  max_upload_mb: 20,
-  allowed_types: ["pdf", "docx"],
 };
 
 export async function fetchSettings(userId: string): Promise<AppSettings> {
   const { data, error } = await supabase
     .from("app_settings")
-    .select("*")
+    .select("user_id, footer_image_data_url, subject_template, body_intro, sender_name")
     .eq("user_id", userId)
     .maybeSingle();
   if (error) throw error;
@@ -37,9 +33,9 @@ export async function saveSettings(userId: string, patch: Partial<AppSettings>) 
   if (error) throw error;
 }
 
-export function applySubjectTemplate(template: string, filename: string, ref?: string) {
-  return template
-    .replaceAll("{filename}", filename)
-    .replaceAll("{reference}", ref ?? "")
-    .trim();
+/** {filename} becomes the first file's name, with "(+N more)" when several files are attached. */
+export function applySubjectTemplate(template: string, filenames: string[], ref?: string) {
+  const first = filenames[0] ?? "";
+  const label = filenames.length > 1 ? `${first} (+${filenames.length - 1} more)` : first;
+  return template.replaceAll("{filename}", label).replaceAll("{reference}", ref ?? "").trim();
 }

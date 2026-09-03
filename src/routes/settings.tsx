@@ -20,7 +20,7 @@ export const Route = createFileRoute("/settings")({
       {
         name: "description",
         content:
-          "Configure the Students Graphics footer banner, default subject template, sender name, upload limit and allowed file types.",
+          "Configure the Students Graphics footer banner, default subject template and sender name.",
       },
       { property: "og:title", content: "Settings | Students Graphics Document Mailer" },
       {
@@ -122,7 +122,7 @@ function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Footer image</CardTitle>
-            <CardDescription>Appears at the bottom of every email, below the preview.</CardDescription>
+            <CardDescription>Appears at the bottom of every email, below the attachment list.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <img
@@ -194,47 +194,9 @@ function SettingsPage() {
                 onChange={(e) => setForm((f) => ({ ...f, body_intro: e.target.value }))}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="maxmb">Maximum upload size (MB)</Label>
-                <Input
-                  id="maxmb"
-                  type="number"
-                  min={1}
-                  max={25}
-                  value={form.max_upload_mb}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, max_upload_mb: Number(e.target.value) || 1 }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Allowed file types</Label>
-                <div className="flex gap-2 pt-2">
-                  {(["pdf", "docx"] as const).map((type) => {
-                    const on = form.allowed_types.includes(type);
-                    return (
-                      <Button
-                        key={type}
-                        type="button"
-                        size="sm"
-                        variant={on ? "default" : "outline"}
-                        onClick={() =>
-                          setForm((f) => ({
-                            ...f,
-                            allowed_types: on
-                              ? f.allowed_types.filter((t) => t !== type)
-                              : [...f.allowed_types, type],
-                          }))
-                        }
-                      >
-                        {type.toUpperCase()}
-                      </Button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Any file type can be attached. Gmail allows up to 25 MB per email in total.
+            </p>
           </CardContent>
         </Card>
 

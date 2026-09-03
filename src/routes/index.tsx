@@ -10,6 +10,7 @@ import {
   Send,
   Trash2,
   UploadCloud,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -21,31 +22,24 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
-import {
-  dataUrlToBase64,
-  detectKind,
-  fileToBase64,
-  formatBytes,
-  generateFirstPagePreview,
-  type FileKind,
-} from "@/lib/documentPreview";
+import { fileToBase64, formatBytes, GMAIL_MESSAGE_LIMIT_BYTES, guessMime } from "@/lib/files";
 import { sendDocument } from "@/lib/gmail.functions";
 import { applySubjectTemplate, DEFAULT_SETTINGS, fetchSettings } from "@/lib/settings";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Send Document | Students Graphics Document Mailer" },
+      { title: "Send Documents | Students Graphics Document Mailer" },
       {
         name: "description",
         content:
-          "Email scanned PDF and DOCX documents from the Students Graphics Gmail account with an inline first-page preview and branded footer.",
+          "Email scanned documents of any type from the Students Graphics Gmail account with a professional branded layout.",
       },
-      { property: "og:title", content: "Send Document | Students Graphics Document Mailer" },
+      { property: "og:title", content: "Send Documents | Students Graphics Document Mailer" },
       {
         property: "og:description",
         content:
-          "Enter a recipient, upload a scanned PDF or DOCX, and send it instantly from Gmail with a professional preview.",
+          "Enter a recipient, add one or more files, and send them instantly from Gmail with a branded footer.",
       },
     ],
   }),
@@ -55,7 +49,7 @@ export const Route = createFileRoute("/")({
 type SentInfo = {
   recipient: string;
   subject: string;
-  filename: string;
+  filenames: string[];
   sentAt: string;
   senderEmail: string | null;
 };
@@ -71,10 +65,7 @@ function Dashboard() {
   const [reference, setReference] = useState("");
   const [subject, setSubject] = useState("");
   const [subjectTouched, setSubjectTouched] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
-  const [kind, setKind] = useState<FileKind | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
-  const [rendering, setRendering] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<SentInfo | null>(null);
@@ -91,54 +82,38 @@ function Dashboard() {
     queryFn: () => fetchSettings(user!.id),
   });
 
-  const documentName = useMemo(
-    () => (file ? file.name.replace(/\.(pdf|docx)$/i, "") : ""),
-    [file],
-  );
+  const totalBytes = useMemo(() => files.reduce((sum, f) => sum + f.size, 0), [files]);
+  const overGmailLimit = totalBytes > GMAIL_MESSAGE_LIMIT_BYTES;
 
   useEffect(() => {
-    if (file && !subjectTouched) {
-      setSubject(applySubjectTemplate(settings.subject_template, file.name, reference));
+    if (files.length && !subjectTouched) {
+      setSubject(
+        applySubjectTemplate(
+          settings.subject_template,
+          files.map((f) => f.name),
+          reference,
+        ),
+      );
     }
-  }, [file, reference, settings.subject_template, subjectTouched]);
+  }, [files, reference, settings.subject_template, subjectTouched]);
 
-  const acceptFile = useCallback(
-    async (incoming: File) => {
-      setError(null);
-      setSent(null);
-      const detected = detectKind(incoming);
-      if (!detected || !settings.allowed_types.includes(detected.toLowerCase())) {
-        setError(
-          `Unsupported file. Only ${settings.allowed_types.map((t) => t.toUpperCase()).join(" and ")} files are accepted.`,
-        );
-        return;
-      }
-      if (incoming.size > settings.max_upload_mb * 1024 * 1024) {
-        setError(
-          `"${incoming.name}" is ${formatBytes(incoming.size)} — larger than the ${settings.max_upload_mb} MB limit.`,
-        );
-        return;
-      }
+  const addFiles = useCallback((incoming: FileList | File[]) => {
+    setError(null);
+    setSent(null);
+    const list = Array.from(incoming);
+    if (!list.length) return;
+    setFiles((prev) => {
+      const seen = new Set(prev.map((f) => `${f.name}:${f.size}`));
+      const additions = list.filter((f) => !seen.has(`${f.name}:${f.size}`));
+      return [...prev, ...additions];
+    });
+    if (inputRef.current) inputRef.current.value = "";
+  }, []);
 
-      setFile(incoming);
-      setKind(detected);
-      setPreview(null);
-      setRendering(true);
-      try {
-        setPreview(await generateFirstPagePreview(incoming, detected));
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Preview could not be generated.");
-      } finally {
-        setRendering(false);
-      }
-    },
-    [settings.allowed_types, settings.max_upload_mb],
-  );
+  const removeFile = (index: number) => setFiles((prev) => prev.filter((_, i) => i !== index));
 
-  const clearFile = () => {
-    setFile(null);
-    setKind(null);
-    setPreview(null);
+  const clearFiles = () => {
+    setFiles([]);
     setError(null);
     if (inputRef.current) inputRef.current.value = "";
   };
@@ -146,19 +121,15 @@ function Dashboard() {
   const templateInput = {
     senderName: settings.sender_name,
     intro: settings.body_intro,
-    documentName,
-    fileName: file?.name ?? "document.pdf",
-    fileKind: kind ?? ("PDF" as FileKind),
     referenceNo: reference || null,
-    previewSrc: preview,
+    files: files.map((f) => ({ name: f.name, size: f.size })),
     footerSrc: settings.footer_image_data_url ?? "/students-graphics-footer.png",
   };
 
-  const canSend =
-    !!file && !!kind && !!recipient && !sending && !rendering && gmail?.connected === true;
+  const canSend = files.length > 0 && !!recipient && !sending && gmail?.connected === true;
 
   const handleSend = async () => {
-    if (!file || !kind) return;
+    if (!files.length) return;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
       setError("Please enter a valid recipient email address.");
       return;
@@ -170,30 +141,32 @@ function Dashboard() {
     setSending(true);
     setError(null);
     try {
+      const payloadFiles = await Promise.all(
+        files.map(async (f) => ({
+          fileName: f.name,
+          fileMime: guessMime(f),
+          fileBase64: await fileToBase64(f),
+        })),
+      );
+      const finalSubject =
+        subject.trim() || `Scanned Document - ${files[0]?.name ?? "document"}`;
       const result = await send({
         data: {
           recipient: recipient.trim(),
-          subject: subject.trim() || `Scanned Document - ${file.name}`,
-          documentName,
+          subject: finalSubject,
           referenceNo: reference.trim() || null,
-          fileName: file.name,
-          fileKind: kind,
-          fileMime: file.type || (kind === "PDF" ? "application/pdf" : "application/octet-stream"),
-          fileBase64: await fileToBase64(file),
-          previewBase64: preview ? dataUrlToBase64(preview) : null,
-          previewMime: "image/jpeg",
+          files: payloadFiles,
         },
       });
       setSent({
         recipient: recipient.trim(),
-        subject: subject.trim(),
-        filename: file.name,
+        subject: finalSubject,
+        filenames: files.map((f) => f.name),
         sentAt: result.sentAt,
         senderEmail: result.senderEmail,
       });
-      toast.success("Document sent successfully");
-      // Temporary artefacts are dropped from memory after a successful send.
-      clearFile();
+      toast.success(files.length > 1 ? "Documents sent successfully" : "Document sent successfully");
+      clearFiles();
       setRecipient("");
       setReference("");
       setSubject("");
@@ -222,9 +195,9 @@ function Dashboard() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Send Document</CardTitle>
+              <CardTitle>Send Documents</CardTitle>
               <CardDescription>
-                Enter the recipient, upload the scan, and send. Everything else is automatic.
+                Enter the recipient, add one or more files, and send. Everything else is automatic.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
@@ -262,61 +235,91 @@ function Dashboard() {
               </div>
 
               <div className="space-y-2">
-                <Label>Upload document</Label>
-                {!file ? (
-                  <div
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      setDragging(true);
-                    }}
-                    onDragLeave={() => setDragging(false)}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      setDragging(false);
-                      const dropped = e.dataTransfer.files?.[0];
-                      if (dropped) void acceptFile(dropped);
-                    }}
-                    className={`flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 text-center transition-colors ${
-                      dragging ? "border-primary bg-accent" : "border-border"
-                    }`}
-                  >
-                    <UploadCloud className="h-8 w-8 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">
-                      Drag &amp; drop a PDF or DOCX here
-                    </p>
-                    <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
-                      Browse files
+                <div className="flex items-center justify-between">
+                  <Label>Files</Label>
+                  {files.length > 0 && (
+                    <Button variant="ghost" size="sm" onClick={clearFiles}>
+                      <Trash2 className="mr-1 h-3.5 w-3.5" /> Clear all
                     </Button>
-                    <input
-                      ref={inputRef}
-                      type="file"
-                      accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                      className="hidden"
-                      onChange={(e) => {
-                        const picked = e.target.files?.[0];
-                        if (picked) void acceptFile(picked);
-                      }}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Maximum {settings.max_upload_mb} MB
-                    </p>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-3 rounded-lg border p-3">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-md bg-secondary">
-                      <FileText className="h-5 w-5 text-secondary-foreground" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{file.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {kind} · {formatBytes(file.size)}
-                        {rendering && " · generating preview…"}
-                      </p>
-                    </div>
-                    <Button variant="ghost" size="icon" onClick={clearFile} aria-label="Remove file">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  )}
+                </div>
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragging(true);
+                  }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragging(false);
+                    if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
+                  }}
+                  className={`flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 text-center transition-colors ${
+                    dragging ? "border-primary bg-accent" : "border-border"
+                  }`}
+                >
+                  <UploadCloud className="h-8 w-8 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    Drag &amp; drop files here — any file type
+                  </p>
+                  <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
+                    {files.length ? "Add more files" : "Browse files"}
+                  </Button>
+                  <input
+                    ref={inputRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files?.length) addFiles(e.target.files);
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Gmail allows up to 25 MB per email in total
+                  </p>
+                </div>
+
+                {files.length > 0 && (
+                  <ul className="divide-y rounded-lg border">
+                    {files.map((f, i) => (
+                      <li key={`${f.name}-${f.size}-${i}`} className="flex items-center gap-3 p-3">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-secondary">
+                          <FileText className="h-4 w-4 text-secondary-foreground" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{f.name}</p>
+                          <p className="text-xs text-muted-foreground">{formatBytes(f.size)}</p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeFile(i)}
+                          aria-label={`Remove ${f.name}`}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </li>
+                    ))}
+                    <li className="flex items-center justify-between px-3 py-2 text-xs text-muted-foreground">
+                      <span>
+                        {files.length} {files.length === 1 ? "file" : "files"}
+                      </span>
+                      <span className={overGmailLimit ? "font-medium text-destructive" : ""}>
+                        Total {formatBytes(totalBytes)}
+                      </span>
+                    </li>
+                  </ul>
+                )}
+
+                {overGmailLimit && (
+                  <Alert>
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Over Gmail's 25 MB limit</AlertTitle>
+                    <AlertDescription>
+                      Gmail will most likely reject this email. You can still try, or remove some
+                      files and send them in a second email.
+                    </AlertDescription>
+                  </Alert>
                 )}
               </div>
 
@@ -331,11 +334,11 @@ function Dashboard() {
               {sent && (
                 <Alert>
                   <CheckCircle2 className="h-4 w-4 text-success" />
-                  <AlertTitle>Document sent successfully</AlertTitle>
+                  <AlertTitle>Sent successfully</AlertTitle>
                   <AlertDescription>
                     <span className="block">To: {sent.recipient}</span>
                     <span className="block">Subject: {sent.subject}</span>
-                    <span className="block">File: {sent.filename}</span>
+                    <span className="block">Files: {sent.filenames.join(", ")}</span>
                     <span className="block">
                       Sent: {new Date(sent.sentAt).toLocaleString()}
                       {sent.senderEmail ? ` from ${sent.senderEmail}` : ""}
@@ -350,7 +353,7 @@ function Dashboard() {
                 ) : (
                   <Send className="mr-2 h-4 w-4" />
                 )}
-                Send Document
+                {sending ? "Sending…" : files.length > 1 ? "Send Documents" : "Send Document"}
               </Button>
             </CardContent>
           </Card>
@@ -360,17 +363,11 @@ function Dashboard() {
           <CardHeader>
             <CardTitle>Email preview</CardTitle>
             <CardDescription>
-              Exactly what the recipient receives — message, document preview, then the footer.
+              Exactly what the recipient receives — message, attachment list, then the footer.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {rendering ? (
-              <div className="flex h-[620px] items-center justify-center rounded-lg border text-sm text-muted-foreground">
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Rendering first page…
-              </div>
-            ) : (
-              <EmailPreviewFrame input={templateInput} />
-            )}
+            <EmailPreviewFrame input={templateInput} />
           </CardContent>
         </Card>
       </div>

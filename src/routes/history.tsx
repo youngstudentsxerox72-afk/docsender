@@ -67,7 +67,10 @@ type Row = {
 function HistoryPage() {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
+  const queryClient = useQueryClient();
+  const clearAll = useServerFn(clearHistory);
   const [term, setTerm] = useState("");
+  const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
@@ -87,6 +90,21 @@ function HistoryPage() {
     },
   });
 
+  const handleClear = async () => {
+    setClearing(true);
+    try {
+      const result = await clearAll();
+      await queryClient.invalidateQueries({ queryKey: ["history", user?.id] });
+      toast.success(
+        result.deleted === 1 ? "1 entry cleared" : `${result.deleted} entries cleared`,
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not clear the history.");
+    } finally {
+      setClearing(false);
+    }
+  };
+
   const filtered = data.filter((row) => {
     const q = term.trim().toLowerCase();
     if (!q) return true;
@@ -101,12 +119,42 @@ function HistoryPage() {
     <AppShell>
       <Card>
         <CardHeader>
-          <CardTitle>Sent History</CardTitle>
-          <CardDescription>
-            Delivery log only — document contents are never stored.
-          </CardDescription>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle>Sent History</CardTitle>
+              <CardDescription className="mt-1.5">
+                Delivery log only — document contents are never stored.
+              </CardDescription>
+            </div>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" disabled={clearing || data.length === 0}>
+                  {clearing ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="mr-2 h-4 w-4" />
+                  )}
+                  Clear history
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Clear the entire history log?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This permanently deletes all {data.length} log{" "}
+                    {data.length === 1 ? "entry" : "entries"}. Emails already sent are not
+                    affected. This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleClear}>Yes, clear history</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
           <div className="relative pt-3">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="absolute left-3 top-[calc(50%+6px)] h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search by recipient, filename or subject"
               className="pl-9"

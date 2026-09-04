@@ -190,11 +190,30 @@ export const sendDocument = createServerFn({ method: "POST" })
       base64: f.fileBase64,
     }));
 
+    const totalRawBytes = files.reduce((sum, f) => sum + f.size, 0);
+    const useDriveLinks = totalRawBytes > DRIVE_FALLBACK_RAW_BYTES;
+
+    let templateFiles: { name: string; size: number; url?: string | null }[];
+    let attachments: { filename: string; contentType: string; base64: string }[];
+
+    if (useDriveLinks) {
+      // Too large for Gmail — upload each file to Google Drive and email download links.
+      templateFiles = [];
+      for (const f of files) {
+        const url = await uploadToDrive(f);
+        templateFiles.push({ name: f.name, size: f.size, url });
+      }
+      attachments = [];
+    } else {
+      templateFiles = files.map((f) => ({ name: f.name, size: f.size }));
+      attachments = files.map((f) => ({ filename: f.name, contentType: f.mime, base64: f.base64 }));
+    }
+
     const templateInput = {
       senderName,
       intro,
       referenceNo: data.referenceNo ?? null,
-      files: files.map((f) => ({ name: f.name, size: f.size })),
+      files: templateFiles,
       footerSrc: footerBase64 ? `cid:${footerCid}` : null,
     };
 
@@ -207,7 +226,7 @@ export const sendDocument = createServerFn({ method: "POST" })
       inlineImages: footerBase64
         ? [{ cid: footerCid, contentType: footerMime, base64: footerBase64, filename: "footer.png" }]
         : [],
-      attachments: files.map((f) => ({ filename: f.name, contentType: f.mime, base64: f.base64 })),
+      attachments,
     });
 
     let senderEmail: string | null = null;

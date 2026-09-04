@@ -7,6 +7,72 @@ import { buildEmailHtml, buildPlainText } from "./emailTemplate";
 import { base64UrlEncodeUtf8, buildMimeMessage, safeFilename } from "./mime.server";
 
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/google_mail/gmail/v1";
+const DRIVE_API_URL = "https://connector-gateway.lovable.dev/google_drive/drive/v3";
+const DRIVE_UPLOAD_URL = "https://connector-gateway.lovable.dev/google_drive/upload/drive/v3";
+
+/** Raw size above which files go to Drive instead of being attached. */
+const DRIVE_FALLBACK_RAW_BYTES = 18 * 1024 * 1024;
+
+function driveHeaders() {
+  const lovableKey = process.env["LOVABLE_API_KEY"];
+  const connectionKey = process.env["GOOGLE_DRIVE_API_KEY"];
+  if (!lovableKey || !connectionKey) {
+    throw new Error(
+      "Google Drive is not connected yet, so files over Gmail's size limit cannot be sent. Please connect Google Drive, or remove some files.",
+    );
+  }
+  return {
+    Authorization: `Bearer ${lovableKey}`,
+    "X-Connection-Api-Key": connectionKey,
+  };
+}
+
+/** Upload one file to Google Drive and make it downloadable by anyone with the link. */
+async function uploadToDrive(file: {
+  name: string;
+  mime: string;
+  base64: string;
+}): Promise<string> {
+  const binary = atob(file.base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+  const boundary = `drive_${crypto.randomUUID()}`;
+  const meta = JSON.stringify({ name: file.name, mimeType: file.mime });
+  const head = new TextEncoder().encode(
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: ${file.mime}\r\nContent-Transfer-Encoding: binary\r\n\r\n`,
+  );
+  const tail = new TextEncoder().encode(`\r\n--${boundary}--`);
+  const body = new Uint8Array(head.length + bytes.length + tail.length);
+  body.set(head, 0);
+  body.set(bytes, head.length);
+  body.set(tail, head.length + bytes.length);
+
+  const uploadRes = await fetch(`${DRIVE_UPLOAD_URL}/files?uploadType=multipart&fields=id,webViewLink`, {
+    method: "POST",
+    headers: { ...driveHeaders(), "Content-Type": `multipart/related; boundary=${boundary}` },
+    body,
+  });
+  if (!uploadRes.ok) {
+    const text = await uploadRes.text();
+    console.error(`[drive] upload failed [${uploadRes.status}]`);
+    throw new Error(`Google Drive could not store "${file.name}" (error ${uploadRes.status}). ${text.slice(0, 200)}`);
+  }
+  const uploaded = (await uploadRes.json()) as { id: string; webViewLink?: string };
+
+  const permRes = await fetch(`${DRIVE_API_URL}/files/${uploaded.id}/permissions`, {
+    method: "POST",
+    headers: { ...driveHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ role: "reader", type: "anyone" }),
+  });
+  if (!permRes.ok) {
+    const text = await permRes.text();
+    console.error(`[drive] share failed [${permRes.status}]`);
+    throw new Error(`Google Drive could not create a download link for "${file.name}". ${text.slice(0, 200)}`);
+  }
+
+  return uploaded.webViewLink ?? `https://drive.google.com/file/d/${uploaded.id}/view`;
+}
 
 function gatewayHeaders() {
   const lovableKey = process.env["LOVABLE_API_KEY"];

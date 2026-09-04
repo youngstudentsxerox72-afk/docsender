@@ -22,7 +22,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
-import { fileToBase64, formatBytes, GMAIL_MESSAGE_LIMIT_BYTES, guessMime } from "@/lib/files";
+import { fileToBase64, formatBytes, DRIVE_FALLBACK_RAW_BYTES, guessMime } from "@/lib/files";
 import { sendDocument } from "@/lib/gmail.functions";
 import { applySubjectTemplate, DEFAULT_SETTINGS, fetchSettings } from "@/lib/settings";
 
@@ -83,7 +83,7 @@ function Dashboard() {
   });
 
   const totalBytes = useMemo(() => files.reduce((sum, f) => sum + f.size, 0), [files]);
-  const overGmailLimit = totalBytes > GMAIL_MESSAGE_LIMIT_BYTES;
+  const overGmailLimit = totalBytes > DRIVE_FALLBACK_RAW_BYTES;
 
   useEffect(() => {
     if (files.length && !subjectTouched) {
@@ -275,7 +275,7 @@ function Dashboard() {
                     }}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Gmail allows up to 25 MB per email in total
+                    Over ~18 MB total, files go via Google Drive download links automatically
                   </p>
                 </div>
 
@@ -314,10 +314,10 @@ function Dashboard() {
                 {overGmailLimit && (
                   <Alert>
                     <AlertTriangle className="h-4 w-4" />
-                    <AlertTitle>Over Gmail's 25 MB limit</AlertTitle>
+                    <AlertTitle>Too large for email attachments</AlertTitle>
                     <AlertDescription>
-                      Gmail will most likely reject this email. You can still try, or remove some
-                      files and send them in a second email.
+                      No problem — these files will be uploaded to your Google Drive and the email
+                      will include download links the recipient can open without signing in.
                     </AlertDescription>
                   </Alert>
                 )}

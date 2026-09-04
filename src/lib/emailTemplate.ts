@@ -78,6 +78,7 @@ export function buildEmailHtml(input: EmailTemplateInput): string {
   const ref = input.referenceNo ? escapeHtml(input.referenceNo) : "";
   const files = input.files.length ? input.files : [{ name: "document.pdf" }];
   const plural = files.length > 1;
+  const viaLink = files.some((f) => f.url);
 
   const footerBlock = input.footerSrc
     ? `<img src="${input.footerSrc}" alt="${senderName}" width="600" style="display:block;width:100%;max-width:600px;height:auto;border:0;" />`

@@ -2,6 +2,8 @@ export type EmailFile = {
   name: string;
   /** Size in bytes (optional, shown in the file list). */
   size?: number;
+  /** Google Drive download link (set when the file was too large to attach). */
+  url?: string | null;
 };
 
 export type EmailTemplateInput = {
@@ -48,14 +50,20 @@ function iconColor(ext: string): string {
 function fileRow(file: EmailFile, last: boolean) {
   const ext = extensionLabel(file.name);
   const size = typeof file.size === "number" ? formatBytes(file.size) : "";
+  const downloadButton = file.url
+    ? `<td valign="middle" align="right" style="padding-left:12px;">
+        <a href="${escapeHtml(file.url)}" style="display:inline-block;background:${NAVY};color:#ffffff;font:bold 12px Arial,Helvetica,sans-serif;text-decoration:none;padding:8px 14px;border-radius:6px;">Download</a>
+      </td>`
+    : "";
   return `<tr><td style="padding:12px 16px;${last ? "" : "border-bottom:1px solid #eef1f5;"}">
-    <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr>
       <td width="46" valign="middle" style="padding-right:12px;">
         <div style="width:42px;height:48px;border-radius:6px;background:${iconColor(ext)};color:#ffffff;font:bold 11px Arial,Helvetica,sans-serif;text-align:center;line-height:48px;">${escapeHtml(ext)}</div>
       </td>
       <td valign="middle" style="font:14px/1.4 Arial,Helvetica,sans-serif;color:#111827;">
         <strong style="word-break:break-all;">${escapeHtml(file.name)}</strong>${size ? `<br /><span style="color:#6b7280;font-size:12px;">${size}</span>` : ""}
       </td>
+      ${downloadButton}
     </tr></table>
   </td></tr>`;
 }
@@ -70,6 +78,7 @@ export function buildEmailHtml(input: EmailTemplateInput): string {
   const ref = input.referenceNo ? escapeHtml(input.referenceNo) : "";
   const files = input.files.length ? input.files : [{ name: "document.pdf" }];
   const plural = files.length > 1;
+  const viaLink = files.some((f) => f.url);
 
   const footerBlock = input.footerSrc
     ? `<img src="${input.footerSrc}" alt="${senderName}" width="600" style="display:block;width:100%;max-width:600px;height:auto;border:0;" />`
@@ -88,11 +97,15 @@ export function buildEmailHtml(input: EmailTemplateInput): string {
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f7f9fc;border:1px solid #e3e6ec;border-radius:8px;margin:0 0 18px 0;">
         <tr><td style="padding:14px 16px;font:14px/1.7 Arial,Helvetica,sans-serif;color:#374151;">
           <strong style="color:${NAVY};">Document Details</strong><br />
-          ${plural ? "Files attached" : "File attached"}: <strong>${files.length}</strong>${ref ? `<br />Reference No.: ${ref}` : ""}
+          ${viaLink ? (plural ? "Files shared" : "File shared") : plural ? "Files attached" : "File attached"}: <strong>${files.length}</strong>${ref ? `<br />Reference No.: ${ref}` : ""}
         </td></tr>
       </table>
 
-      <p style="margin:0 0 16px 0;">The original ${plural ? "files are" : "file is"} attached to this email for your reference.</p>
+      <p style="margin:0 0 16px 0;">${
+        viaLink
+          ? `The ${plural ? "files are" : "file is"} too large to attach, so ${plural ? "they have" : "it has"} been uploaded to Google Drive. Use the download ${plural ? "links" : "link"} below — no sign-in is required.`
+          : `The original ${plural ? "files are" : "file is"} attached to this email for your reference.`
+      }</p>
     </td></tr>
 
     <tr><td style="padding:0 24px 8px 24px;">
@@ -116,17 +129,23 @@ export function buildEmailHtml(input: EmailTemplateInput): string {
 
 export function buildPlainText(input: EmailTemplateInput): string {
   const plural = input.files.length > 1;
+  const viaLink = input.files.some((f) => f.url);
   return [
     "Dear Sir/Madam,",
     "",
     input.intro,
     "",
     "Document Details",
-    `${plural ? "Files attached" : "File attached"}: ${input.files.length}`,
-    ...input.files.map((f) => ` - ${f.name}${typeof f.size === "number" ? ` (${formatBytes(f.size)})` : ""}`),
+    `${viaLink ? (plural ? "Files shared" : "File shared") : plural ? "Files attached" : "File attached"}: ${input.files.length}`,
+    ...input.files.map(
+      (f) =>
+        ` - ${f.name}${typeof f.size === "number" ? ` (${formatBytes(f.size)})` : ""}${f.url ? `\n   Download: ${f.url}` : ""}`,
+    ),
     input.referenceNo ? `Reference No.: ${input.referenceNo}` : "",
     "",
-    `The original ${plural ? "files are" : "file is"} attached to this email.`,
+    viaLink
+      ? `The ${plural ? "files are" : "file is"} too large to attach, so ${plural ? "they have" : "it has"} been uploaded to Google Drive. Use the download ${plural ? "links" : "link"} above — no sign-in is required.`
+      : `The original ${plural ? "files are" : "file is"} attached to this email.`,
     "",
     `Kindly acknowledge the receipt of the ${plural ? "documents" : "document"}.`,
     "",

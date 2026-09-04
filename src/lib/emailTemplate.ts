@@ -2,6 +2,8 @@ export type EmailFile = {
   name: string;
   /** Size in bytes (optional, shown in the file list). */
   size?: number;
+  /** Google Drive download link (set when the file was too large to attach). */
+  url?: string | null;
 };
 
 export type EmailTemplateInput = {
@@ -48,14 +50,20 @@ function iconColor(ext: string): string {
 function fileRow(file: EmailFile, last: boolean) {
   const ext = extensionLabel(file.name);
   const size = typeof file.size === "number" ? formatBytes(file.size) : "";
+  const downloadButton = file.url
+    ? `<td valign="middle" align="right" style="padding-left:12px;">
+        <a href="${escapeHtml(file.url)}" style="display:inline-block;background:${NAVY};color:#ffffff;font:bold 12px Arial,Helvetica,sans-serif;text-decoration:none;padding:8px 14px;border-radius:6px;">Download</a>
+      </td>`
+    : "";
   return `<tr><td style="padding:12px 16px;${last ? "" : "border-bottom:1px solid #eef1f5;"}">
-    <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr>
       <td width="46" valign="middle" style="padding-right:12px;">
         <div style="width:42px;height:48px;border-radius:6px;background:${iconColor(ext)};color:#ffffff;font:bold 11px Arial,Helvetica,sans-serif;text-align:center;line-height:48px;">${escapeHtml(ext)}</div>
       </td>
       <td valign="middle" style="font:14px/1.4 Arial,Helvetica,sans-serif;color:#111827;">
         <strong style="word-break:break-all;">${escapeHtml(file.name)}</strong>${size ? `<br /><span style="color:#6b7280;font-size:12px;">${size}</span>` : ""}
       </td>
+      ${downloadButton}
     </tr></table>
   </td></tr>`;
 }

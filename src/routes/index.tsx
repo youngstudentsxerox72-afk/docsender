@@ -360,13 +360,55 @@ function Dashboard() {
         </div>
 
         <Card className="lg:sticky lg:top-6 lg:self-start">
-          <CardHeader>
-            <CardTitle>Email preview</CardTitle>
-            <CardDescription>
-              Exactly what the recipient receives — message, attachment list, then the footer.
-            </CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+            <div className="space-y-1.5">
+              <CardTitle>Email preview</CardTitle>
+              <CardDescription>
+                Exactly what the recipient receives — message, attachment list, then the footer.
+              </CardDescription>
+            </div>
+            <Button
+              variant={editingBody ? "default" : "outline"}
+              size="sm"
+              onClick={() => setEditingBody((v) => !v)}
+            >
+              {editingBody ? (
+                <>
+                  <Check className="mr-1 h-3.5 w-3.5" /> Done
+                </>
+              ) : (
+                <>
+                  <Pencil className="mr-1 h-3.5 w-3.5" /> Edit message
+                </>
+              )}
+            </Button>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
+            {editingBody && (
+              <div className="space-y-2 rounded-lg border bg-accent/40 p-3">
+                <Label htmlFor="body-intro">Message body (this email only)</Label>
+                <Textarea
+                  id="body-intro"
+                  rows={4}
+                  value={intro}
+                  onChange={(e) => setIntro(e.target.value)}
+                  placeholder={settings.body_intro}
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    Shown after “Dear Sir/Madam,”. Change the default in Settings.
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIntro(settings.body_intro)}
+                    disabled={intro === settings.body_intro}
+                  >
+                    Reset to default
+                  </Button>
+                </div>
+              </div>
+            )}
             <EmailPreviewFrame input={templateInput} />
           </CardContent>
         </Card>

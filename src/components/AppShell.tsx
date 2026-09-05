@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { getGmailStatus } from "@/lib/gmail.functions";
+import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
 export function useGmailStatus(enabled = true) {
@@ -29,7 +30,8 @@ const NAV = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { data: gmail } = useGmailStatus();
+  const { user } = useAuth();
+  const { data: gmail } = useGmailStatus(!!user);
 
   return (
     <div className="min-h-screen bg-muted/40">

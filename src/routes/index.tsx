@@ -73,6 +73,9 @@ function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<SentInfo | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [editingBody, setEditingBody] = useState(false);
+  const [intro, setIntro] = useState(DEFAULT_SETTINGS.body_intro);
+  const [introTouched, setIntroTouched] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -84,6 +87,11 @@ function Dashboard() {
     enabled: !!user,
     queryFn: () => fetchSettings(user!.id),
   });
+
+  // Follow the saved default until the operator edits the message for this email.
+  useEffect(() => {
+    if (!introTouched) setIntro(settings.body_intro);
+  }, [settings.body_intro, introTouched]);
 
   const totalBytes = useMemo(() => files.reduce((sum, f) => sum + f.size, 0), [files]);
   const overGmailLimit = totalBytes > DRIVE_FALLBACK_RAW_BYTES;

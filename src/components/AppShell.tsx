@@ -29,7 +29,8 @@ const NAV = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { data: gmail } = useGmailStatus();
+  const { user } = useAuth();
+  const { data: gmail } = useGmailStatus(!!user);
 
   return (
     <div className="min-h-screen bg-muted/40">

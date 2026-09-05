@@ -4,9 +4,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
   AlertTriangle,
+  Check,
   CheckCircle2,
   FileText,
   Loader2,
+  Pencil,
   Send,
   Trash2,
   UploadCloud,
@@ -21,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { fileToBase64, formatBytes, DRIVE_FALLBACK_RAW_BYTES, guessMime } from "@/lib/files";
 import { sendDocument } from "@/lib/gmail.functions";
@@ -70,6 +73,9 @@ function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<SentInfo | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [editingBody, setEditingBody] = useState(false);
+  const [intro, setIntro] = useState(DEFAULT_SETTINGS.body_intro);
+  const [introTouched, setIntroTouched] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -81,6 +87,11 @@ function Dashboard() {
     enabled: !!user,
     queryFn: () => fetchSettings(user!.id),
   });
+
+  // Follow the saved default until the operator edits the message for this email.
+  useEffect(() => {
+    if (!introTouched) setIntro(settings.body_intro);
+  }, [settings.body_intro, introTouched]);
 
   const totalBytes = useMemo(() => files.reduce((sum, f) => sum + f.size, 0), [files]);
   const overGmailLimit = totalBytes > DRIVE_FALLBACK_RAW_BYTES;
@@ -120,7 +131,7 @@ function Dashboard() {
 
   const templateInput = {
     senderName: settings.sender_name,
-    intro: settings.body_intro,
+    intro: intro.trim() || settings.body_intro,
     referenceNo: reference || null,
     files: files.map((f) => ({ name: f.name, size: f.size })),
     footerSrc: settings.footer_image_data_url ?? "/students-graphics-footer.png",
@@ -155,6 +166,7 @@ function Dashboard() {
           recipient: recipient.trim(),
           subject: finalSubject,
           referenceNo: reference.trim() || null,
+          intro: intro.trim() || null,
           files: payloadFiles,
         },
       });
@@ -171,6 +183,8 @@ function Dashboard() {
       setReference("");
       setSubject("");
       setSubjectTouched(false);
+      setIntroTouched(false);
+      setEditingBody(false);
       await queryClient.invalidateQueries({ queryKey: ["history", user?.id] });
     } catch (e) {
       setError(e instanceof Error ? e.message : "The email could not be sent. Please try again.");
@@ -360,13 +374,61 @@ function Dashboard() {
         </div>
 
         <Card className="lg:sticky lg:top-6 lg:self-start">
-          <CardHeader>
-            <CardTitle>Email preview</CardTitle>
-            <CardDescription>
-              Exactly what the recipient receives — message, attachment list, then the footer.
-            </CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+            <div className="space-y-1.5">
+              <CardTitle>Email preview</CardTitle>
+              <CardDescription>
+                Exactly what the recipient receives — message, attachment list, then the footer.
+              </CardDescription>
+            </div>
+            <Button
+              variant={editingBody ? "default" : "outline"}
+              size="sm"
+              onClick={() => setEditingBody((v) => !v)}
+            >
+              {editingBody ? (
+                <>
+                  <Check className="mr-1 h-3.5 w-3.5" /> Done
+                </>
+              ) : (
+                <>
+                  <Pencil className="mr-1 h-3.5 w-3.5" /> Edit message
+                </>
+              )}
+            </Button>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
+            {editingBody && (
+              <div className="space-y-2 rounded-lg border bg-accent/40 p-3">
+                <Label htmlFor="body-intro">Message body (this email only)</Label>
+                <Textarea
+                  id="body-intro"
+                  rows={4}
+                  value={intro}
+                  onChange={(e) => {
+                    setIntroTouched(true);
+                    setIntro(e.target.value);
+                  }}
+                  placeholder={settings.body_intro}
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    Shown after “Dear Sir/Madam,”. Change the default in Settings.
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setIntro(settings.body_intro);
+                      setIntroTouched(false);
+                    }}
+                    disabled={intro === settings.body_intro}
+                  >
+                    Reset to default
+                  </Button>
+                </div>
+              </div>
+            )}
             <EmailPreviewFrame input={templateInput} />
           </CardContent>
         </Card>

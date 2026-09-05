@@ -4,9 +4,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
   AlertTriangle,
+  Check,
   CheckCircle2,
   FileText,
   Loader2,
+  Pencil,
   Send,
   Trash2,
   UploadCloud,
@@ -21,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { fileToBase64, formatBytes, DRIVE_FALLBACK_RAW_BYTES, guessMime } from "@/lib/files";
 import { sendDocument } from "@/lib/gmail.functions";

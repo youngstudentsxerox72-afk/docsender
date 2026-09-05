@@ -137,6 +137,8 @@ const sendSchema = z.object({
   recipient: z.string().trim().email("Please enter a valid recipient email address."),
   subject: z.string().trim().min(1).max(300),
   referenceNo: z.string().max(100).optional().nullable(),
+  /** Optional per-email message body override (edited in the preview). */
+  intro: z.string().trim().max(2000).optional().nullable(),
   files: z.array(fileSchema).min(1, "Please add at least one file.").max(50),
 });
 
@@ -153,7 +155,8 @@ export const sendDocument = createServerFn({ method: "POST" })
       .maybeSingle();
 
     const senderName = settings?.sender_name ?? "Students Graphics";
-    const intro = settings?.body_intro ?? "Please find the scanned document as requested.";
+    const intro =
+      data.intro?.trim() || settings?.body_intro || "Please find the scanned document as requested.";
 
     // Footer image: settings override, otherwise the bundled default banner.
     let footerBase64: string | null = null;

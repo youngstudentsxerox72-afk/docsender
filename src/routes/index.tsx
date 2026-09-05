@@ -131,7 +131,7 @@ function Dashboard() {
 
   const templateInput = {
     senderName: settings.sender_name,
-    intro: settings.body_intro,
+    intro: intro.trim() || settings.body_intro,
     referenceNo: reference || null,
     files: files.map((f) => ({ name: f.name, size: f.size })),
     footerSrc: settings.footer_image_data_url ?? "/students-graphics-footer.png",
@@ -166,6 +166,7 @@ function Dashboard() {
           recipient: recipient.trim(),
           subject: finalSubject,
           referenceNo: reference.trim() || null,
+          intro: intro.trim() || null,
           files: payloadFiles,
         },
       });
@@ -182,6 +183,8 @@ function Dashboard() {
       setReference("");
       setSubject("");
       setSubjectTouched(false);
+      setIntroTouched(false);
+      setEditingBody(false);
       await queryClient.invalidateQueries({ queryKey: ["history", user?.id] });
     } catch (e) {
       setError(e instanceof Error ? e.message : "The email could not be sent. Please try again.");
@@ -402,7 +405,10 @@ function Dashboard() {
                   id="body-intro"
                   rows={4}
                   value={intro}
-                  onChange={(e) => setIntro(e.target.value)}
+                  onChange={(e) => {
+                    setIntroTouched(true);
+                    setIntro(e.target.value);
+                  }}
                   placeholder={settings.body_intro}
                 />
                 <div className="flex items-center justify-between gap-2">
@@ -412,7 +418,10 @@ function Dashboard() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setIntro(settings.body_intro)}
+                    onClick={() => {
+                      setIntro(settings.body_intro);
+                      setIntroTouched(false);
+                    }}
                     disabled={intro === settings.body_intro}
                   >
                     Reset to default

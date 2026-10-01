@@ -14,7 +14,20 @@ export function useGmailStatus(enabled = true) {
   const fn = useServerFn(getGmailStatus);
   return useQuery({
     queryKey: ["gmail-status"],
-    queryFn: () => fn(),
+    queryFn: async () => {
+      try {
+        return await fn();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "";
+        return {
+          connected: false as const,
+          email: null,
+          reason: /unauthori/i.test(msg)
+            ? "Your login session expired. Please refresh the page or sign in again."
+            : "Could not check Gmail right now. Please try again.",
+        };
+      }
+    },
     enabled,
     retry: 2,
     retryDelay: 1500,

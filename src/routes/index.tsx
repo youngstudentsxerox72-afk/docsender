@@ -49,6 +49,13 @@ export const Route = createFileRoute("/")({
   component: Dashboard,
 });
 
+const parseEmails = (v: string) =>
+  v
+    .split(/[\s,;]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 type SentInfo = {
   recipient: string;
   subject: string;
@@ -62,9 +69,10 @@ function Dashboard() {
   const { user, loading } = useAuth();
   const queryClient = useQueryClient();
   const send = useServerFn(sendDocument);
-  const { data: gmail } = useGmailStatus(!!user);
+  const { data: gmail, refetch: refetchGmail, isFetching: gmailChecking } = useGmailStatus(!!user);
 
   const [recipient, setRecipient] = useState("");
+  const [cc, setCc] = useState("");
   const [reference, setReference] = useState("");
   const [subject, setSubject] = useState("");
   const [subjectTouched, setSubjectTouched] = useState(false);
@@ -137,16 +145,15 @@ function Dashboard() {
     footerSrc: settings.footer_image_data_url ?? "/students-graphics-footer.png",
   };
 
-  const canSend = files.length > 0 && !!recipient && !sending && gmail?.connected === true;
+  const canSend = files.length > 0 && !!recipient.trim() && !sending && gmail?.connected !== false;
 
   const handleSend = async () => {
     if (!files.length) return;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
-      setError("Please enter a valid recipient email address.");
-      return;
-    }
-    if (!gmail?.connected) {
-      setError("Please connect your Gmail account first.");
+    const toList = parseEmails(recipient);
+    const ccList = parseEmails(cc);
+    const bad = [...toList, ...ccList].find((e) => !EMAIL_RE.test(e));
+    if (!toList.length || bad) {
+      setError(bad ? `"${bad}" is not a valid email address.` : "Please enter a recipient email address.");
       return;
     }
     setSending(true);
@@ -163,7 +170,8 @@ function Dashboard() {
         subject.trim() || `Scanned Document - ${files[0]?.name ?? "document"}`;
       const result = await send({
         data: {
-          recipient: recipient.trim(),
+          to: toList,
+          cc: ccList,
           subject: finalSubject,
           referenceNo: reference.trim() || null,
           intro: intro.trim() || null,
@@ -171,7 +179,7 @@ function Dashboard() {
         },
       });
       setSent({
-        recipient: recipient.trim(),
+        recipient: [...toList, ...ccList.map((c) => `cc: ${c}`)].join(", "),
         subject: finalSubject,
         filenames: files.map((f) => f.name),
         sentAt: result.sentAt,
@@ -180,6 +188,7 @@ function Dashboard() {
       toast.success(files.length > 1 ? "Documents sent successfully" : "Document sent successfully");
       clearFiles();
       setRecipient("");
+      setCc("");
       setReference("");
       setSubject("");
       setSubjectTouched(false);
@@ -201,8 +210,12 @@ function Dashboard() {
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Gmail not connected</AlertTitle>
-              <AlertDescription>
-                Please connect your Gmail account first — open Settings for instructions.
+              <AlertDescription className="space-y-2">
+                <span className="block">{gmail.reason && gmail.reason !== "not_configured" ? gmail.reason : "Please connect your Gmail account first — open Settings for instructions."}</span>
+                <Button variant="outline" size="sm" onClick={() => refetchGmail()} disabled={gmailChecking}>
+                  {gmailChecking && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+                  Check again
+                </Button>
               </AlertDescription>
             </Alert>
           )}
@@ -216,13 +229,25 @@ function Dashboard() {
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="recipient">Recipient email</Label>
+                <Label htmlFor="recipient">To</Label>
                 <Input
                   id="recipient"
-                  type="email"
-                  placeholder="customer@example.com"
+                  placeholder="customer@example.com, another@example.com"
                   value={recipient}
                   onChange={(e) => setRecipient(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Separate multiple addresses with commas.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="cc">Cc (optional)</Label>
+                <Input
+                  id="cc"
+                  placeholder="office@example.com"
+                  value={cc}
+                  onChange={(e) => setCc(e.target.value)}
                 />
               </div>
 
@@ -289,7 +314,7 @@ function Dashboard() {
                     }}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Over ~18 MB total, files go via Google Drive download links automatically
+                    Up to ~19 MB total goes as normal attachments; above that, files go via Google Drive links automatically
                   </p>
                 </div>
 

@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { FileText, History, LogOut, Settings as SettingsIcon, Mail, CheckCircle2, AlertTriangle } from "lucide-react";
+import { FileText, History, Inbox, LogOut, Settings as SettingsIcon, Mail, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
@@ -14,16 +14,32 @@ export function useGmailStatus(enabled = true) {
   const fn = useServerFn(getGmailStatus);
   return useQuery({
     queryKey: ["gmail-status"],
-    queryFn: () => fn(),
+    queryFn: async () => {
+      try {
+        return await fn();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "";
+        return {
+          connected: false as const,
+          email: null,
+          reason: /unauthori/i.test(msg)
+            ? "Your login session expired. Please refresh the page or sign in again."
+            : "Could not check Gmail right now. Please try again.",
+        };
+      }
+    },
     enabled,
-    retry: false,
+    retry: 2,
+    retryDelay: 1500,
     staleTime: 60_000,
+    refetchOnWindowFocus: true,
   });
 }
 
 const NAV = [
   { to: "/", label: "Send Document", icon: FileText },
-  { to: "/history", label: "Sent History", icon: History },
+  { to: "/sent", label: "Sent", icon: Inbox },
+  { to: "/history", label: "History", icon: History },
   { to: "/settings", label: "Settings", icon: SettingsIcon },
 ] as const;
 

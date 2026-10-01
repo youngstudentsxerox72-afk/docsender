@@ -4,14 +4,16 @@ import { z } from "zod";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { buildEmailHtml, buildPlainText } from "./emailTemplate";
-import { base64UrlEncodeUtf8, buildMimeMessage, safeFilename } from "./mime.server";
+import { buildMimeMessage, safeFilename } from "./mime.server";
 
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/google_mail/gmail/v1";
+const UPLOAD_SEND_URL =
+  "https://connector-gateway.lovable.dev/google_mail/upload/gmail/v1/users/me/messages/send?uploadType=media";
+const BATCH_URL = "https://connector-gateway.lovable.dev/google_mail/batch/gmail/v1";
 const DRIVE_API_URL = "https://connector-gateway.lovable.dev/google_drive/drive/v3";
 const DRIVE_UPLOAD_URL = "https://connector-gateway.lovable.dev/google_drive/upload/drive/v3";
 
-/** Raw size above which files go to Drive instead of being attached. */
-const DRIVE_FALLBACK_RAW_BYTES = 18 * 1024 * 1024;
+import { DRIVE_FALLBACK_RAW_BYTES } from "./files";
 
 function driveHeaders() {
   const lovableKey = process.env["LOVABLE_API_KEY"];
@@ -133,8 +135,13 @@ const fileSchema = z.object({
   fileBase64: z.string().min(1),
 });
 
+const emailList = z
+  .array(z.string().trim().email("One of the email addresses is not valid."))
+  .max(50, "Up to 50 addresses per field.");
+
 const sendSchema = z.object({
-  recipient: z.string().trim().email("Please enter a valid recipient email address."),
+  to: emailList.min(1, "Please enter at least one recipient email address."),
+  cc: emailList.default([]),
   subject: z.string().trim().min(1).max(300),
   referenceNo: z.string().max(100).optional().nullable(),
   /** Optional per-email message body override (edited in the preview). */
@@ -220,18 +227,6 @@ export const sendDocument = createServerFn({ method: "POST" })
       footerSrc: footerBase64 ? `cid:${footerCid}` : null,
     };
 
-    const mime = buildMimeMessage({
-      fromName: senderName,
-      to: data.recipient,
-      subject: data.subject,
-      html: buildEmailHtml(templateInput),
-      text: buildPlainText(templateInput),
-      inlineImages: footerBase64
-        ? [{ cid: footerCid, contentType: footerMime, base64: footerBase64, filename: "footer.png" }]
-        : [],
-      attachments,
-    });
-
     let senderEmail: string | null = null;
     try {
       const profileRes = await fetch(`${GATEWAY_URL}/users/me/profile`, { headers: gatewayHeaders() });
@@ -242,11 +237,25 @@ export const sendDocument = createServerFn({ method: "POST" })
       senderEmail = null;
     }
 
+    const mime = buildMimeMessage({
+      fromName: senderName,
+      fromEmail: senderEmail,
+      to: data.to.join(", "),
+      cc: data.cc.join(", "),
+      subject: data.subject,
+      html: buildEmailHtml(templateInput),
+      text: buildPlainText(templateInput),
+      inlineImages: footerBase64
+        ? [{ cid: footerCid, contentType: footerMime, base64: footerBase64, filename: "footer.png" }]
+        : [],
+      attachments,
+    });
+
     const filenameSummary = files.map((f) => f.name).join(", ");
     const recordHistory = async (status: string, errorMessage: string | null) => {
       await supabase.from("send_history").insert({
         user_id: userId,
-        recipient: data.recipient,
+        recipient: [...data.to, ...data.cc.map((c) => `cc: ${c}`)].join(", "),
         filename: filenameSummary,
         subject: data.subject,
         status,
@@ -258,10 +267,11 @@ export const sendDocument = createServerFn({ method: "POST" })
 
     let response: Response;
     try {
-      response = await fetch(`${GATEWAY_URL}/users/me/messages/send`, {
+      // Media upload endpoint accepts messages up to Gmail's full 25 MB (the JSON endpoint is far smaller).
+      response = await fetch(UPLOAD_SEND_URL, {
         method: "POST",
-        headers: gatewayHeaders(),
-        body: JSON.stringify({ raw: base64UrlEncodeUtf8(mime) }),
+        headers: { ...gatewayHeaders(), "Content-Type": "message/rfc822" },
+        body: mime,
       });
     } catch (error) {
       const message = "Network error while contacting Gmail. Please check your connection and try again.";
@@ -299,4 +309,105 @@ export const clearHistory = createServerFn({ method: "POST" })
       .eq("user_id", context.userId);
     if (error) throw new Error("Could not clear the history. Please try again.");
     return { deleted: count ?? 0 };
+  });
+
+type SentMeta = {
+  id: string;
+  threadId: string;
+  to: string;
+  cc: string;
+  subject: string;
+  date: string;
+  snippet: string;
+};
+
+/** Fetch metadata for many messages in one Gmail batch request. */
+async function batchGetMetadata(ids: string[]): Promise<SentMeta[]> {
+  if (!ids.length) return [];
+  const { "Content-Type": _ct, ...auth } = gatewayHeaders();
+  const boundary = `batch_${crypto.randomUUID()}`;
+  const parts = ids.map(
+    (id, i) =>
+      `--${boundary}\r\nContent-Type: application/http\r\nContent-ID: <item${i}>\r\n\r\nGET /gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Date\r\n\r\n`,
+  );
+  const res = await fetch(BATCH_URL, {
+    method: "POST",
+    headers: { ...auth, "Content-Type": `multipart/mixed; boundary=${boundary}` },
+    body: parts.join("") + `--${boundary}--`,
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(friendlyGmailError(res.status, body));
+  }
+  const ct = res.headers.get("content-type") ?? "";
+  const m = /boundary="?([^";]+)"?/i.exec(ct);
+  if (!m) throw new Error("Unexpected response from Gmail.");
+  const text = await res.text();
+  const out: SentMeta[] = [];
+  for (const part of text.split(`--${m[1]}`)) {
+    const status = /HTTP\/1\.1 (\d{3})/.exec(part);
+    if (!status || status[1] !== "200") continue;
+    const jsonStart = part.indexOf("{");
+    const jsonEnd = part.lastIndexOf("}");
+    if (jsonStart < 0) continue;
+    try {
+      const msg = JSON.parse(part.slice(jsonStart, jsonEnd + 1)) as {
+        id: string;
+        threadId: string;
+        snippet?: string;
+        internalDate?: string;
+        payload?: { headers?: { name: string; value: string }[] };
+      };
+      const h = (n: string) =>
+        msg.payload?.headers?.find((x) => x.name.toLowerCase() === n.toLowerCase())?.value ?? "";
+      out.push({
+        id: msg.id,
+        threadId: msg.threadId,
+        to: h("To"),
+        cc: h("Cc"),
+        subject: h("Subject"),
+        date: msg.internalDate ? new Date(Number(msg.internalDate)).toISOString() : h("Date"),
+        snippet: msg.snippet ?? "",
+      });
+    } catch {
+      /* skip malformed part */
+    }
+  }
+  return out;
+}
+
+/** Gmail "Sent" folder, with bounce detection (delivery failure notices in the same thread). */
+export const listSentMail = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) =>
+    z.object({ q: z.string().max(200).optional(), pageToken: z.string().max(200).optional() }).parse(data ?? {}),
+  )
+  .handler(async ({ data }) => {
+    const params = new URLSearchParams({ labelIds: "SENT", maxResults: "25" });
+    if (data.q) params.set("q", data.q);
+    if (data.pageToken) params.set("pageToken", data.pageToken);
+    const listRes = await fetch(`${GATEWAY_URL}/users/me/messages?${params}`, { headers: gatewayHeaders() });
+    if (!listRes.ok) throw new Error(friendlyGmailError(listRes.status, await listRes.text()));
+    const list = (await listRes.json()) as { messages?: { id: string }[]; nextPageToken?: string };
+
+    const bounceParams = new URLSearchParams({
+      q: "from:(mailer-daemon OR postmaster) newer_than:60d",
+      maxResults: "100",
+    });
+    const bounceRes = await fetch(`${GATEWAY_URL}/users/me/messages?${bounceParams}`, {
+      headers: gatewayHeaders(),
+    });
+    const bounced = new Set<string>();
+    if (bounceRes.ok) {
+      const b = (await bounceRes.json()) as { messages?: { threadId: string }[] };
+      for (const m of b.messages ?? []) bounced.add(m.threadId);
+    }
+
+    const metas = await batchGetMetadata((list.messages ?? []).map((m) => m.id));
+    return {
+      nextPageToken: list.nextPageToken ?? null,
+      messages: metas
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .map((m) => ({ ...m, status: bounced.has(m.threadId) ? ("bounced" as const) : ("sent" as const) })),
+    };
   });

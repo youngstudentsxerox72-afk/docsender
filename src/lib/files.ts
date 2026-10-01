@@ -8,9 +8,9 @@ export const GMAIL_MESSAGE_LIMIT_BYTES = 25 * 1024 * 1024;
 /**
  * Raw total file size above which attachments are uploaded to Google Drive
  * and the email carries download links instead. MIME base64 encoding inflates
- * files by ~33%, so ~18.6 MB raw already reaches Gmail's 25 MB message cap.
+ * files by ~33%, so ~19 MB raw (after line breaks and the email body) already reaches Gmail's 25 MB message cap.
  */
-export const DRIVE_FALLBACK_RAW_BYTES = 18 * 1024 * 1024;
+export const DRIVE_FALLBACK_RAW_BYTES = 19 * 1024 * 1024;
 
 export async function fileToBase64(file: File): Promise<string> {
   const buffer = new Uint8Array(await file.arrayBuffer());

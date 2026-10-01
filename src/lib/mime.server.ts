@@ -50,7 +50,9 @@ export type Attachment = {
 
 export type MimeInput = {
   fromName: string;
+  fromEmail?: string | null;
   to: string;
+  cc?: string;
   subject: string;
   html: string;
   text: string;
@@ -72,8 +74,10 @@ export function buildMimeMessage(input: MimeInput): string {
   const L: string[] = [];
 
   L.push(`To: ${input.to}`);
+  if (input.cc) L.push(`Cc: ${input.cc}`);
   L.push(`Subject: ${encodeHeader(input.subject)}`);
-  if (input.fromName) L.push(`From: ${encodeHeader(input.fromName)} <me>`);
+  if (input.fromName && input.fromEmail)
+    L.push(`From: ${encodeHeader(input.fromName)} <${input.fromEmail}>`);
   L.push("MIME-Version: 1.0");
   L.push(`Content-Type: multipart/mixed; boundary="${mixed}"`);
   L.push("");

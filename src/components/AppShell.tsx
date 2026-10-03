@@ -67,7 +67,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </span>
           </Link>
 
-          <nav className="order-3 -mx-1 flex w-full gap-1 overflow-x-auto md:order-none md:w-auto md:overflow-visible">
+          <nav className="order-3 -mx-1 flex w-full flex-wrap gap-1 md:order-none md:w-auto md:flex-nowrap">
             {NAV.map((item) => {
               const active = pathname === item.to;
               return (
@@ -89,7 +89,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
 
           <div className="ml-auto flex items-center gap-2">
-            <span className="hidden items-center gap-1.5 rounded-full border border-primary-foreground/15 bg-primary-foreground/5 px-3 py-1 text-xs sm:flex">
+            <span className="hidden items-center gap-1.5 rounded-full border border-primary-foreground/15 bg-primary-foreground/5 px-3 py-1 text-xs xl:flex">
               {gmail?.connected ? (
                 <CheckCircle2 className="h-3.5 w-3.5 text-success" />
               ) : (

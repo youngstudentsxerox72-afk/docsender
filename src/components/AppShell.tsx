@@ -50,49 +50,60 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { data: gmail } = useGmailStatus(!!user);
 
   return (
-    <div className="min-h-screen bg-muted/40">
-      <header className="border-b bg-card">
+    <div className="min-h-screen">
+      <header className="sticky top-0 z-30 border-b border-primary/20 bg-primary text-primary-foreground">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-4 px-4 py-3">
-          <Link to="/" className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
+          <Link to="/" className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gold text-gold-foreground">
               <FileText className="h-5 w-5" />
             </span>
-            <span className="text-lg font-semibold tracking-tight text-foreground">
-              Students Graphics
+            <span className="leading-tight">
+              <span className="block font-[family-name:var(--font-display)] text-lg font-semibold tracking-tight">
+                Students Graphics
+              </span>
+              <span className="block text-[11px] uppercase tracking-[0.18em] text-primary-foreground/60">
+                Document Mailer
+              </span>
             </span>
           </Link>
 
-          <nav className="order-3 flex w-full gap-1 md:order-none md:w-auto">
-            {NAV.map((item) => (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={cn(
-                  "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-                  pathname === item.to && "bg-accent text-accent-foreground",
-                )}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.label}
-              </Link>
-            ))}
+          <nav className="order-3 -mx-1 flex w-full gap-1 overflow-x-auto md:order-none md:w-auto">
+            {NAV.map((item) => {
+              const active = pathname === item.to;
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "relative flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-primary-foreground/70 transition-colors hover:bg-primary-foreground/10 hover:text-primary-foreground",
+                    active &&
+                      "text-primary-foreground after:absolute after:inset-x-3 after:-bottom-[13px] after:h-0.5 after:rounded-full after:bg-gold",
+                  )}
+                >
+                  <item.icon className="h-4 w-4" />
+                  {item.label}
+                </Link>
+              );
+            })}
           </nav>
 
-          <div className="ml-auto flex items-center gap-3">
-            <Badge variant={gmail?.connected ? "secondary" : "outline"} className="gap-1.5 py-1">
+          <div className="ml-auto flex items-center gap-2">
+            <span className="hidden items-center gap-1.5 rounded-full border border-primary-foreground/15 bg-primary-foreground/5 px-3 py-1 text-xs sm:flex">
               {gmail?.connected ? (
                 <CheckCircle2 className="h-3.5 w-3.5 text-success" />
               ) : (
-                <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
+                <AlertTriangle className="h-3.5 w-3.5 text-gold" />
               )}
-              <Mail className="h-3.5 w-3.5" />
+              <Mail className="h-3.5 w-3.5 opacity-70" />
               <span className="max-w-[180px] truncate">
                 {gmail?.connected ? gmail.email : "Gmail not connected"}
               </span>
-            </Badge>
+            </span>
             <Button
               variant="ghost"
               size="sm"
+              className="text-primary-foreground/80 hover:bg-primary-foreground/10 hover:text-primary-foreground"
               onClick={async () => {
                 await supabase.auth.signOut();
                 navigate({ to: "/auth" });
@@ -105,7 +116,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 py-8 md:py-10">{children}</main>
     </div>
   );
 }

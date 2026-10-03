@@ -19,6 +19,10 @@
  */
 
 @theme inline {
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+  --color-gold: var(--gold);
+  --color-gold-foreground: var(--gold-foreground);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -64,8 +68,11 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(0.985 0.004 250);
+  --radius: 0.75rem;
+  --gold: oklch(0.78 0.12 80);
+  --gold-foreground: oklch(0.25 0.06 70);
+  --shadow-soft: 0 1px 2px oklch(0.29 0.09 264 / 0.04), 0 8px 24px -12px oklch(0.29 0.09 264 / 0.12);
+  --background: oklch(0.982 0.006 85);
   --foreground: oklch(0.21 0.04 262);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.21 0.04 262);
@@ -145,6 +152,36 @@
 
   body {
     background-color: var(--color-background);
+    background-image: radial-gradient(
+      ellipse 80% 40% at 50% -10%,
+      color-mix(in oklab, var(--gold) 14%, transparent),
+      transparent 70%
+    );
+    background-attachment: fixed;
     color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  [data-slot="card-title"] {
+    font-family: var(--font-display);
+    letter-spacing: -0.015em;
+    font-weight: 600;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--gold) 35%, transparent);
+  }
+
+  [data-slot="card"] {
+    box-shadow: var(--shadow-soft);
+  }
+
+  :focus-visible {
+    outline-color: var(--gold);
   }
 }

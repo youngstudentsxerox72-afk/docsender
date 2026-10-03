@@ -155,6 +155,17 @@ export const sendDocument = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
 
+    // Only approved staff accounts may send email from the connected Gmail account.
+    const { data: isStaff } = await supabase.rpc("has_role", {
+      _user_id: userId,
+      _role: "staff",
+    });
+    if (!isStaff) {
+      throw new Error(
+        "Your account is not approved to send documents. Please ask the owner to grant you staff access.",
+      );
+    }
+
     const { data: settings } = await supabase
       .from("app_settings")
       .select("footer_image_data_url, sender_name, body_intro")

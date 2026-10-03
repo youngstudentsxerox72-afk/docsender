@@ -67,7 +67,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </span>
           </Link>
 
-          <nav className="order-3 -mx-1 flex w-full gap-1 overflow-x-auto md:order-none md:w-auto">
+          <nav className="order-3 -mx-1 flex w-full gap-1 overflow-x-auto md:order-none md:w-auto md:overflow-visible">
             {NAV.map((item) => {
               const active = pathname === item.to;
               return (
@@ -78,7 +78,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   className={cn(
                     "relative flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-primary-foreground/70 transition-colors hover:bg-primary-foreground/10 hover:text-primary-foreground",
                     active &&
-                      "text-primary-foreground after:absolute after:inset-x-3 after:-bottom-[13px] after:h-0.5 after:rounded-full after:bg-gold",
+                      "text-primary-foreground after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-gold",
                   )}
                 >
                   <item.icon className="h-4 w-4" />

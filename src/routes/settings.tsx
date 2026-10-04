@@ -27,6 +27,8 @@ export const Route = createFileRoute("/settings")({
         property: "og:description",
         content: "Branding and sending defaults for the Students Graphics document mailer.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: SettingsPage,

@@ -108,6 +108,25 @@ function friendlyGmailError(status: number, body: string): string {
   return `Gmail could not send the email (error ${status}). ${body.slice(0, 300)}`;
 }
 
+let footerCache: string | null = null;
+/** Default footer banner as base64, fetched once per server instance. */
+async function getDefaultFooterBase64(): Promise<string | null> {
+  if (footerCache) return footerCache;
+  try {
+    const origin = new URL(getRequest().url).origin;
+    const res = await fetch(`${origin}/students-graphics-footer.png`);
+    if (!res.ok) return null;
+    const buf = new Uint8Array(await res.arrayBuffer());
+    let binary = "";
+    for (let i = 0; i < buf.length; i += 0x8000)
+      binary += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+    footerCache = btoa(binary);
+    return footerCache;
+  } catch {
+    return null;
+  }
+}
+
 /** Which Gmail account is connected, if any. */
 export const getGmailStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -155,28 +174,30 @@ export const sendDocument = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
 
-    // Only approved staff accounts may send email from the connected Gmail account.
-    const { data: isStaff } = await supabase.rpc("has_role", {
-      _user_id: userId,
-      _role: "staff",
-    });
-    if (!isStaff) {
+    // Run independent checks in parallel to cut send latency.
+    const [roleRes, settingsRes, senderEmail] = await Promise.all([
+      supabase.rpc("has_role", { _user_id: userId, _role: "staff" }),
+      supabase
+        .from("app_settings")
+        .select("footer_image_data_url, sender_name, body_intro")
+        .eq("user_id", userId)
+        .maybeSingle(),
+      fetch(`${GATEWAY_URL}/users/me/profile`, { headers: gatewayHeaders() })
+        .then(async (r) => (r.ok ? (((await r.json()) as { emailAddress?: string }).emailAddress ?? null) : null))
+        .catch(() => null),
+    ]);
+    if (!roleRes.data) {
       throw new Error(
         "Your account is not approved to send documents. Please ask the owner to grant you staff access.",
       );
     }
-
-    const { data: settings } = await supabase
-      .from("app_settings")
-      .select("footer_image_data_url, sender_name, body_intro")
-      .eq("user_id", userId)
-      .maybeSingle();
+    const settings = settingsRes.data;
 
     const senderName = settings?.sender_name ?? "Students Graphics";
     const intro =
       data.intro?.trim() || settings?.body_intro || "Please find the scanned document as requested.";
 
-    // Footer image: settings override, otherwise the bundled default banner.
+    // Footer image: settings override, otherwise the bundled default banner (cached in memory).
     let footerBase64: string | null = null;
     let footerMime = "image/png";
     const configured = settings?.footer_image_data_url ?? null;
@@ -188,19 +209,7 @@ export const sendDocument = createServerFn({ method: "POST" })
       }
     }
     if (!footerBase64) {
-      try {
-        const origin = new URL(getRequest().url).origin;
-        const res = await fetch(`${origin}/students-graphics-footer.png`);
-        if (res.ok) {
-          const buf = new Uint8Array(await res.arrayBuffer());
-          let binary = "";
-          for (let i = 0; i < buf.length; i += 0x8000)
-            binary += String.fromCharCode(...buf.subarray(i, i + 0x8000));
-          footerBase64 = btoa(binary);
-        }
-      } catch {
-        footerBase64 = null;
-      }
+      footerBase64 = await getDefaultFooterBase64();
     }
 
     const footerCid = `footer_${crypto.randomUUID()}@studentsgraphics`;
@@ -218,12 +227,10 @@ export const sendDocument = createServerFn({ method: "POST" })
     let attachments: { filename: string; contentType: string; base64: string }[];
 
     if (useDriveLinks) {
-      // Too large for Gmail — upload each file to Google Drive and email download links.
-      templateFiles = [];
-      for (const f of files) {
-        const url = await uploadToDrive(f);
-        templateFiles.push({ name: f.name, size: f.size, url });
-      }
+      // Too large for Gmail — upload files to Google Drive in parallel and email download links.
+      templateFiles = await Promise.all(
+        files.map(async (f) => ({ name: f.name, size: f.size, url: await uploadToDrive(f) })),
+      );
       attachments = [];
     } else {
       templateFiles = files.map((f) => ({ name: f.name, size: f.size }));
@@ -237,16 +244,6 @@ export const sendDocument = createServerFn({ method: "POST" })
       files: templateFiles,
       footerSrc: footerBase64 ? `cid:${footerCid}` : null,
     };
-
-    let senderEmail: string | null = null;
-    try {
-      const profileRes = await fetch(`${GATEWAY_URL}/users/me/profile`, { headers: gatewayHeaders() });
-      if (profileRes.ok) {
-        senderEmail = ((await profileRes.json()) as { emailAddress?: string }).emailAddress ?? null;
-      }
-    } catch {
-      senderEmail = null;
-    }
 
     const mime = buildMimeMessage({
       fromName: senderName,
@@ -397,19 +394,21 @@ export const listSentMail = createServerFn({ method: "GET" })
     const params = new URLSearchParams({ labelIds: "SENT", maxResults: "25" });
     if (data.q) params.set("q", data.q);
     if (data.pageToken) params.set("pageToken", data.pageToken);
-    const listRes = await fetch(`${GATEWAY_URL}/users/me/messages?${params}`, { headers: gatewayHeaders() });
-    if (!listRes.ok) throw new Error(friendlyGmailError(listRes.status, await listRes.text()));
-    const list = (await listRes.json()) as { messages?: { id: string }[]; nextPageToken?: string };
-
     const bounceParams = new URLSearchParams({
       q: "from:(mailer-daemon OR postmaster) newer_than:60d",
       maxResults: "100",
     });
-    const bounceRes = await fetch(`${GATEWAY_URL}/users/me/messages?${bounceParams}`, {
-      headers: gatewayHeaders(),
-    });
+    const [listRes, bounceRes] = await Promise.all([
+      fetch(`${GATEWAY_URL}/users/me/messages?${params}`, { headers: gatewayHeaders() }),
+      fetch(`${GATEWAY_URL}/users/me/messages?${bounceParams}`, { headers: gatewayHeaders() }).catch(
+        () => null,
+      ),
+    ]);
+    if (!listRes.ok) throw new Error(friendlyGmailError(listRes.status, await listRes.text()));
+    const list = (await listRes.json()) as { messages?: { id: string }[]; nextPageToken?: string };
+
     const bounced = new Set<string>();
-    if (bounceRes.ok) {
+    if (bounceRes?.ok) {
       const b = (await bounceRes.json()) as { messages?: { threadId: string }[] };
       for (const m of b.messages ?? []) bounced.add(m.threadId);
     }

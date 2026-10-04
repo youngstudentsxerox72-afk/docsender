@@ -29,10 +29,10 @@ export function useGmailStatus(enabled = true) {
       }
     },
     enabled,
-    retry: 2,
+    retry: 1,
     retryDelay: 1500,
-    staleTime: 60_000,
-    refetchOnWindowFocus: true,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
   });
 }
 

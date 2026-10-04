@@ -26,6 +26,8 @@ export const Route = createFileRoute("/auth")({
         property: "og:description",
         content: "Secure operator login for the Students Graphics document mailer.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: AuthPage,

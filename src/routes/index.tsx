@@ -44,6 +44,8 @@ export const Route = createFileRoute("/")({
         content:
           "Enter a recipient, add one or more files, and send them instantly from Gmail with a branded footer.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: Dashboard,

@@ -48,6 +48,8 @@ export const Route = createFileRoute("/history")({
         property: "og:description",
         content: "Delivery log of documents emailed from the Students Graphics Gmail account.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: HistoryPage,

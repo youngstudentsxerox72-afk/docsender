@@ -24,6 +24,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
 import { fileToBase64, formatBytes, DRIVE_FALLBACK_RAW_BYTES, guessMime } from "@/lib/files";
 import { sendDocument } from "@/lib/gmail.functions";
@@ -87,6 +88,22 @@ function Dashboard() {
   const [intro, setIntro] = useState(DEFAULT_SETTINGS.body_intro);
   const [introTouched, setIntroTouched] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const [progress, setProgress] = useState<{ pct: number; label: string; elapsed: number; remaining: number } | null>(null);
+
+  const wrapSelection = (marker: string) => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const { selectionStart: a, selectionEnd: b } = el;
+    const selected = intro.slice(a, b) || "text";
+    const next = intro.slice(0, a) + marker + selected + marker + intro.slice(b);
+    setIntroTouched(true);
+    setIntro(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(a + marker.length, a + marker.length + selected.length);
+    });
+  };
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
@@ -143,7 +160,8 @@ function Dashboard() {
     senderName: settings.sender_name,
     intro: intro.trim() || settings.body_intro,
     referenceNo: reference || null,
-    files: files.map((f) => ({ name: f.name, size: f.size })),
+    files: files.map((f) => ({ name: f.name, size: f.size, url: "#" })),
+    attached: !overGmailLimit,
     footerSrc: settings.footer_image_data_url ?? "/students-graphics-footer.png",
   };
 
@@ -160,6 +178,19 @@ function Dashboard() {
     }
     setSending(true);
     setError(null);
+    // Estimated progress: upload speed isn't reported by the server, so estimate from total size.
+    const totalMb = totalBytes / (1024 * 1024);
+    const estimateSec = 4 + totalMb * (overGmailLimit ? 1.6 : 2.2);
+    const started = Date.now();
+    setProgress({ pct: 0, label: "Reading files…", elapsed: 0, remaining: Math.round(estimateSec) });
+    const timer = window.setInterval(() => {
+      const elapsed = (Date.now() - started) / 1000;
+      const ratio = elapsed / estimateSec;
+      const pct = Math.min(97, Math.round(ratio < 1 ? ratio * 90 : 90 + (1 - Math.exp(-(ratio - 1))) * 7));
+      const label =
+        pct < 10 ? "Reading files…" : pct < 75 ? `Uploading ${files.length} file${files.length > 1 ? "s" : ""} to Google Drive…` : "Sending via Gmail…";
+      setProgress({ pct, label, elapsed: Math.round(elapsed), remaining: Math.max(0, Math.round(estimateSec - elapsed)) });
+    }, 500);
     try {
       const payloadFiles = await Promise.all(
         files.map(async (f) => ({
@@ -200,6 +231,8 @@ function Dashboard() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "The email could not be sent. Please try again.");
     } finally {
+      window.clearInterval(timer);
+      setProgress(null);
       setSending(false);
     }
   };
@@ -396,6 +429,19 @@ function Dashboard() {
                 )}
                 {sending ? "Sending…" : files.length > 1 ? "Send Documents" : "Send Document"}
               </Button>
+              {progress && (
+                <div className="space-y-1.5 rounded-lg border bg-accent/40 p-3" aria-live="polite">
+                  <div className="flex justify-between text-sm font-medium">
+                    <span>{progress.label}</span>
+                    <span>{progress.pct}%</span>
+                  </div>
+                  <Progress value={progress.pct} />
+                  <p className="text-xs text-muted-foreground">
+                    {formatBytes(totalBytes)} · {progress.elapsed}s elapsed ·{" "}
+                    {progress.remaining > 0 ? `about ${progress.remaining}s left (estimate)` : "finishing up…"}
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -428,9 +474,16 @@ function Dashboard() {
             {editingBody && (
               <div className="space-y-2 rounded-lg border bg-accent/40 p-3">
                 <Label htmlFor="body-intro">Message body (this email only)</Label>
+                <div className="flex gap-1">
+                  <Button type="button" variant="outline" size="sm" className="h-7 w-8 p-0 font-bold" onClick={() => wrapSelection("**")} aria-label="Bold">B</Button>
+                  <Button type="button" variant="outline" size="sm" className="h-7 w-8 p-0 italic" onClick={() => wrapSelection("*")} aria-label="Italic">I</Button>
+                  <Button type="button" variant="outline" size="sm" className="h-7 w-8 p-0 underline" onClick={() => wrapSelection("__")} aria-label="Underline">U</Button>
+                  <span className="ml-2 self-center text-xs text-muted-foreground">Select text, then click. Enter = new line.</span>
+                </div>
                 <Textarea
+                  ref={bodyRef}
                   id="body-intro"
-                  rows={4}
+                  rows={6}
                   value={intro}
                   onChange={(e) => {
                     setIntroTouched(true);

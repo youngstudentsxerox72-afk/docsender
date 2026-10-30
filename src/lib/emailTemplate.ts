@@ -68,13 +68,27 @@ function fileRow(file: EmailFile, last: boolean) {
   </td></tr>`;
 }
 
+/** Converts **bold**, *italic*, __underline__ and line breaks into safe HTML. */
+export function formatMessageHtml(value: string): string {
+  return escapeHtml(value)
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/__(.+?)__/g, "<u>$1</u>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    .replace(/\r?\n/g, "<br />");
+}
+
+/** Strips formatting markers for the plain-text version. */
+export function stripMessageFormatting(value: string): string {
+  return value.replace(/\*\*(.+?)\*\*/g, "$1").replace(/__(.+?)__/g, "$1").replace(/\*(.+?)\*/g, "$1");
+}
+
 /**
  * Builds the responsive, inline-CSS HTML body for the outgoing email.
  * Footer always renders AFTER the message and attachment list.
  */
 export function buildEmailHtml(input: EmailTemplateInput): string {
   const senderName = escapeHtml(input.senderName || "Students Graphics");
-  const intro = escapeHtml(input.intro || "Please find the scanned document as requested.");
+  const intro = formatMessageHtml(input.intro || "Please find the scanned document as requested.");
   const ref = input.referenceNo ? escapeHtml(input.referenceNo) : "";
   const files = input.files.length ? input.files : [{ name: "document.pdf" }];
   const plural = files.length > 1;
@@ -102,9 +116,11 @@ export function buildEmailHtml(input: EmailTemplateInput): string {
       </table>
 
       <p style="margin:0 0 16px 0;">${
-        viaLink
-          ? `The ${plural ? "files are" : "file is"} too large to attach, so ${plural ? "they have" : "it has"} been uploaded to Google Drive. Use the download ${plural ? "links" : "link"} below — no sign-in is required.`
-          : `The original ${plural ? "files are" : "file is"} attached to this email for your reference.`
+        input.attached
+          ? `The original ${plural ? "files are" : "file is"} attached to this email. You can also use the Download ${plural ? "buttons" : "button"} below — no sign-in is required.`
+          : viaLink
+            ? `The ${plural ? "files are" : "file is"} too large to attach, so ${plural ? "they have" : "it has"} been uploaded to Google Drive. Use the download ${plural ? "links" : "link"} below — no sign-in is required.`
+            : `The original ${plural ? "files are" : "file is"} attached to this email for your reference.`
       }</p>
     </td></tr>
 

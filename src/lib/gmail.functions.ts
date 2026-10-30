@@ -223,25 +223,21 @@ export const sendDocument = createServerFn({ method: "POST" })
     const totalRawBytes = files.reduce((sum, f) => sum + f.size, 0);
     const useDriveLinks = totalRawBytes > DRIVE_FALLBACK_RAW_BYTES;
 
-    let templateFiles: { name: string; size: number; url?: string | null }[];
-    let attachments: { filename: string; contentType: string; base64: string }[];
 
-    if (useDriveLinks) {
-      // Too large for Gmail — upload files to Google Drive in parallel and email download links.
-      templateFiles = await Promise.all(
-        files.map(async (f) => ({ name: f.name, size: f.size, url: await uploadToDrive(f) })),
-      );
-      attachments = [];
-    } else {
-      templateFiles = files.map((f) => ({ name: f.name, size: f.size }));
-      attachments = files.map((f) => ({ filename: f.name, contentType: f.mime, base64: f.base64 }));
-    }
+    // Always upload to Drive so every file gets a Download button; also attach when small enough.
+    const templateFiles: { name: string; size: number; url?: string | null }[] = await Promise.all(
+      files.map(async (f) => ({ name: f.name, size: f.size, url: await uploadToDrive(f) })),
+    );
+    const attachments: { filename: string; contentType: string; base64: string }[] = useDriveLinks
+      ? []
+      : files.map((f) => ({ filename: f.name, contentType: f.mime, base64: f.base64 }));
 
     const templateInput = {
       senderName,
       intro,
       referenceNo: data.referenceNo ?? null,
       files: templateFiles,
+      attached: !useDriveLinks,
       footerSrc: footerBase64 ? `cid:${footerCid}` : null,
     };
 

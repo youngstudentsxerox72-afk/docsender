@@ -13,6 +13,8 @@ export type EmailTemplateInput = {
   files: EmailFile[];
   /** src used for the inline footer banner (cid:... in real mail, URL/data: in UI preview) */
   footerSrc: string | null;
+  /** True when files are attached to the email as well as linked. */
+  attached?: boolean;
 };
 
 export function escapeHtml(value: string): string {
@@ -111,7 +113,7 @@ export function buildEmailHtml(input: EmailTemplateInput): string {
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f7f9fc;border:1px solid #e3e6ec;border-radius:8px;margin:0 0 18px 0;">
         <tr><td style="padding:14px 16px;font:14px/1.7 Arial,Helvetica,sans-serif;color:#374151;">
           <strong style="color:${NAVY};">Document Details</strong><br />
-          ${viaLink ? (plural ? "Files shared" : "File shared") : plural ? "Files attached" : "File attached"}: <strong>${files.length}</strong>${ref ? `<br />Reference No.: ${ref}` : ""}
+          ${viaLink && !input.attached ? (plural ? "Files shared" : "File shared") : plural ? "Files attached" : "File attached"}: <strong>${files.length}</strong>${ref ? `<br />Reference No.: ${ref}` : ""}
         </td></tr>
       </table>
 
@@ -149,17 +151,19 @@ export function buildPlainText(input: EmailTemplateInput): string {
   return [
     "Dear Sir/Madam,",
     "",
-    input.intro,
+    stripMessageFormatting(input.intro),
     "",
     "Document Details",
-    `${viaLink ? (plural ? "Files shared" : "File shared") : plural ? "Files attached" : "File attached"}: ${input.files.length}`,
+    `${viaLink && !input.attached ? (plural ? "Files shared" : "File shared") : plural ? "Files attached" : "File attached"}: ${input.files.length}`,
     ...input.files.map(
       (f) =>
         ` - ${f.name}${typeof f.size === "number" ? ` (${formatBytes(f.size)})` : ""}${f.url ? `\n   Download: ${f.url}` : ""}`,
     ),
     input.referenceNo ? `Reference No.: ${input.referenceNo}` : "",
     "",
-    viaLink
+    input.attached
+      ? `The original ${plural ? "files are" : "file is"} attached; download links are also listed above.`
+      : viaLink
       ? `The ${plural ? "files are" : "file is"} too large to attach, so ${plural ? "they have" : "it has"} been uploaded to Google Drive. Use the download ${plural ? "links" : "link"} above — no sign-in is required.`
       : `The original ${plural ? "files are" : "file is"} attached to this email.`,
     "",

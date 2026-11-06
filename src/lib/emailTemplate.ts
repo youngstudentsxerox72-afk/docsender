@@ -34,6 +34,8 @@ export function formatBytes(bytes: number): string {
 
 const NAVY = "#0e2453";
 const GOLD = "#c8a24a";
+const DRIVE_NOTICE_EN = "DOWNLOAD THE FILES TO YOUR DEVICE. THESE FILES WILL BE AUTOMATICALLY DELETED AFTER 3 DAYS.";
+const DRIVE_NOTICE_TA = "இந்த பைல்களை உங்கள் மொபைல் அல்லது கம்ப்யூட்டரில் டவுன்லோட் செய்து வைத்துக்கொள்ளுங்கள். 3 நாட்களுக்குப் பிறகு இந்த பைல்கள் தானாகவே அழிந்துவிடும்.";
 
 function extensionLabel(name: string): string {
   const match = /\.([a-z0-9]{1,5})$/i.exec(name);
@@ -109,7 +111,10 @@ export function buildEmailHtml(input: EmailTemplateInput): string {
     <tr><td style="padding:24px 24px 8px 24px;font:16px/1.6 Arial,Helvetica,sans-serif;color:#1f2937;">
       <p style="margin:0 0 14px 0;">Dear Sir/Madam,</p>
       <p style="margin:0 0 18px 0;">${intro}</p>
-
+${viaLink ? `      <div style="background:#fff7e6;border:1px solid ${GOLD};border-radius:8px;padding:12px 16px;margin:0 0 18px 0;font:14px/1.6 Arial,Helvetica,sans-serif;color:#7a4b00;">
+        <strong>${DRIVE_NOTICE_EN}</strong><br /><br />${DRIVE_NOTICE_TA}
+      </div>
+` : ""}
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f7f9fc;border:1px solid #e3e6ec;border-radius:8px;margin:0 0 18px 0;">
         <tr><td style="padding:14px 16px;font:14px/1.7 Arial,Helvetica,sans-serif;color:#374151;">
           <strong style="color:${NAVY};">Document Details</strong><br />
@@ -157,6 +162,8 @@ export function buildPlainText(input: EmailTemplateInput): string {
     "",
     stripMessageFormatting(input.intro),
     "",
+    viaLink ? DRIVE_NOTICE_EN : "",
+    viaLink ? DRIVE_NOTICE_TA : "",
     "Document Details",
     `${viaLink && !input.attached ? (plural ? "Files shared" : "File shared") : plural ? "Files attached" : "File attached"}: ${input.files.length}`,
     ...input.files.map(

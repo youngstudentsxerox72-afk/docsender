@@ -226,7 +226,11 @@ export const sendDocument = createServerFn({ method: "POST" })
 
     // Always upload to Drive so every file gets a Download button; also attach when small enough.
     const templateFiles: { name: string; size: number; url?: string | null }[] = await Promise.all(
-      files.map(async (f) => ({ name: f.name, size: f.size, url: await uploadToDrive(f) })),
+      files.map(async (f) => ({
+        name: f.name,
+        size: f.size,
+        url: useDriveLinks ? await uploadToDrive(f) : null,
+      })),
     );
     const attachments: { filename: string; contentType: string; base64: string }[] = useDriveLinks
       ? []

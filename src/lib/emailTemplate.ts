@@ -166,7 +166,7 @@ export function buildPlainText(input: EmailTemplateInput): string {
     input.referenceNo ? `Reference No.: ${input.referenceNo}` : "",
     "",
     input.attached
-      ? `The original ${plural ? "files are" : "file is"} attached; download links are also listed above.`
+      ? `The original ${plural ? "files are" : "file is"} attached to this email.`
       : viaLink
       ? `The ${plural ? "files are" : "file is"} too large to attach, so ${plural ? "they have" : "it has"} been uploaded to Google Drive. Use the download ${plural ? "links" : "link"} above — no sign-in is required.`
       : `The original ${plural ? "files are" : "file is"} attached to this email.`,

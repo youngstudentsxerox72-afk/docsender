@@ -148,6 +148,21 @@ function Dashboard() {
     if (inputRef.current) inputRef.current.value = "";
   }, []);
 
+  useEffect(() => {
+    const handlePaste = (event: ClipboardEvent) => {
+      const pastedFiles = Array.from(event.clipboardData?.items ?? [])
+        .filter((item) => item.kind === "file")
+        .map((item) => item.getAsFile())
+        .filter((file): file is File => file !== null);
+      if (!pastedFiles.length) return;
+      event.preventDefault();
+      addFiles(pastedFiles);
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [addFiles]);
+
   const removeFile = (index: number) => setFiles((prev) => prev.filter((_, i) => i !== index));
 
   const clearFiles = () => {
@@ -334,7 +349,7 @@ function Dashboard() {
                 >
                   <UploadCloud className="h-8 w-8 text-muted-foreground" />
                   <p className="text-sm text-muted-foreground">
-                    Drag &amp; drop files here — any file type
+                    Drag &amp; drop files here or copy files and press Ctrl+V / ⌘+V — any file type
                   </p>
                   <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
                     {files.length ? "Add more files" : "Browse files"}

@@ -118,19 +118,23 @@ export function buildEmailHtml(input: EmailTemplateInput): string {
       </table>
 
       <p style="margin:0 0 16px 0;">${
-        input.attached
-          ? `The original ${plural ? "files are" : "file is"} attached to this email. You can also use the Download ${plural ? "buttons" : "button"} below — no sign-in is required.`
+        input.attached && !viaLink
+          ? `The original ${plural ? "files are" : "file is"} attached to this email for your reference.`
           : viaLink
             ? `The ${plural ? "files are" : "file is"} too large to attach, so ${plural ? "they have" : "it has"} been uploaded to Google Drive. Use the download ${plural ? "links" : "link"} below — no sign-in is required.`
             : `The original ${plural ? "files are" : "file is"} attached to this email for your reference.`
       }</p>
     </td></tr>
 
-    <tr><td style="padding:0 24px 8px 24px;">
+    ${
+      viaLink
+        ? `<tr><td style="padding:0 24px 8px 24px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #dfe3ea;border-radius:10px;">
-        ${files.map((f, i) => fileRow(f, i === files.length - 1)).join("")}
+        ${files.filter((f) => f.url).map((f, i, arr) => fileRow(f, i === arr.length - 1)).join("")}
       </table>
-    </td></tr>
+    </td></tr>`
+        : ""
+    }
 
     <tr><td style="padding:18px 24px 24px 24px;font:16px/1.6 Arial,Helvetica,sans-serif;color:#1f2937;">
       <p style="margin:0 0 14px 0;">Kindly acknowledge the receipt of the ${plural ? "documents" : "document"}.</p>
@@ -162,7 +166,7 @@ export function buildPlainText(input: EmailTemplateInput): string {
     input.referenceNo ? `Reference No.: ${input.referenceNo}` : "",
     "",
     input.attached
-      ? `The original ${plural ? "files are" : "file is"} attached; download links are also listed above.`
+      ? `The original ${plural ? "files are" : "file is"} attached to this email.`
       : viaLink
       ? `The ${plural ? "files are" : "file is"} too large to attach, so ${plural ? "they have" : "it has"} been uploaded to Google Drive. Use the download ${plural ? "links" : "link"} above — no sign-in is required.`
       : `The original ${plural ? "files are" : "file is"} attached to this email.`,

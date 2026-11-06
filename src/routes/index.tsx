@@ -160,7 +160,7 @@ function Dashboard() {
     senderName: settings.sender_name,
     intro: intro.trim() || settings.body_intro,
     referenceNo: reference || null,
-    files: files.map((f) => ({ name: f.name, size: f.size, url: "#" })),
+    files: files.map((f) => ({ name: f.name, size: f.size, url: overGmailLimit ? "#" : null })),
     attached: !overGmailLimit,
     footerSrc: settings.footer_image_data_url ?? "/students-graphics-footer.png",
   };

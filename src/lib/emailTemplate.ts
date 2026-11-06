@@ -37,6 +37,15 @@ const GOLD = "#c8a24a";
 const DRIVE_NOTICE_EN = "DOWNLOAD THE FILES TO YOUR DEVICE. THESE FILES WILL BE AUTOMATICALLY DELETED AFTER 3 DAYS.";
 const DRIVE_NOTICE_TA = "இந்த பைல்களை உங்கள் மொபைல் அல்லது கம்ப்யூட்டரில் டவுன்லோட் செய்து வைத்துக்கொள்ளுங்கள். 3 நாட்களுக்குப் பிறகு இந்த பைல்கள் தானாகவே அழிந்துவிடும்.";
 
+/** Keep the Drive-only warning out of saved/custom intro text; it is rendered conditionally below. */
+function stripDriveNotice(value: string): string {
+  return value
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== DRIVE_NOTICE_EN && line.trim() !== DRIVE_NOTICE_TA)
+    .join("\n")
+    .trim();
+}
+
 function extensionLabel(name: string): string {
   const match = /\.([a-z0-9]{1,5})$/i.exec(name);
   return (match?.[1] ?? "FILE").toUpperCase().slice(0, 5);
@@ -92,7 +101,9 @@ export function stripMessageFormatting(value: string): string {
  */
 export function buildEmailHtml(input: EmailTemplateInput): string {
   const senderName = escapeHtml(input.senderName || "Students Graphics");
-  const intro = formatMessageHtml(input.intro || "Please find the scanned document as requested.");
+  const intro = formatMessageHtml(
+    stripDriveNotice(input.intro || "Please find the scanned document as requested."),
+  );
   const ref = input.referenceNo ? escapeHtml(input.referenceNo) : "";
   const files = input.files.length ? input.files : [{ name: "document.pdf" }];
   const plural = files.length > 1;
@@ -160,7 +171,7 @@ export function buildPlainText(input: EmailTemplateInput): string {
   return [
     "Dear Sir/Madam,",
     "",
-    stripMessageFormatting(input.intro),
+    stripMessageFormatting(stripDriveNotice(input.intro)),
     "",
     viaLink ? DRIVE_NOTICE_EN : "",
     viaLink ? DRIVE_NOTICE_TA : "",

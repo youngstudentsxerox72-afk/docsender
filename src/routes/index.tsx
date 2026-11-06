@@ -203,7 +203,13 @@ function Dashboard() {
       const ratio = elapsed / estimateSec;
       const pct = Math.min(97, Math.round(ratio < 1 ? ratio * 90 : 90 + (1 - Math.exp(-(ratio - 1))) * 7));
       const label =
-        pct < 10 ? "Reading files…" : pct < 75 ? `Uploading ${files.length} file${files.length > 1 ? "s" : ""} to Google Drive…` : "Sending via Gmail…";
+        pct < 10
+          ? "Reading files…"
+          : pct < 75
+            ? overGmailLimit
+              ? `Uploading ${files.length} file${files.length > 1 ? "s" : ""} to Google Drive…`
+              : "Preparing attachments…"
+            : "Sending via Gmail…";
       setProgress({ pct, label, elapsed: Math.round(elapsed), remaining: Math.max(0, Math.round(estimateSec - elapsed)) });
     }, 500);
     try {

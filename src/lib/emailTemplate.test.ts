@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
-import { buildPlainText, usesDriveLinks } from "./emailTemplate";
+import { buildEmailHtml, buildPlainText, usesDriveLinks } from "./emailTemplate";
 import { getSendProgressLabel } from "./files";
 
 const baseInput = {
@@ -18,6 +18,9 @@ it("shows the standard body without the Drive-only notice for normal attachments
   assert.ok(body.includes("Please find the scanned document as requested."));
   assert.ok(!body.includes("DOWNLOAD THE FILES TO YOUR DEVICE"));
   assert.ok(!body.includes("இந்த பைல்களை"));
+  const html = buildEmailHtml(baseInput);
+  assert.ok(!html.includes("DOWNLOAD THE FILES TO YOUR DEVICE"));
+  assert.ok(!html.includes("இந்த பைல்களை"));
 });
 
 it("adds the English and Tamil three-day notice for Google Drive files", () => {
@@ -29,11 +32,16 @@ it("adds the English and Tamil three-day notice for Google Drive files", () => {
   assert.equal(usesDriveLinks(driveInput.files), true);
   const body = buildPlainText(driveInput);
   assert.ok(
-    body.includes("DOWNLOAD THE FILES TO YOUR DEVICE. THESE FILES WILL BE AUTOMATICALLY DELETED AFTER 3 DAYS."),
+    body.includes(
+      "DOWNLOAD THE FILES TO YOUR DEVICE. THESE FILES WILL BE AUTOMATICALLY DELETED AFTER 3 DAYS.",
+    ),
   );
   assert.ok(
     body.includes("இந்த பைல்களை உங்கள் மொபைல் அல்லது கம்ப்யூட்டரில் டவுன்லோட் செய்து வைத்துக்கொள்ளுங்கள்"),
   );
+  const html = buildEmailHtml(driveInput);
+  assert.ok(html.includes("DOWNLOAD THE FILES TO YOUR DEVICE"));
+  assert.ok(html.includes("இந்த பைல்களை"));
 });
 
 it("shows Drive upload progress only for files using Google Drive", () => {

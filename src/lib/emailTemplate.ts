@@ -47,15 +47,16 @@ function stripDriveNotice(value: string): string {
 }
 
 function getEmailIntro(value: string | null | undefined): string {
-  return stripDriveNotice(value || "Please find the scanned document as requested.") ||
-    "Please find the scanned document as requested.";
+  return (
+    stripDriveNotice(value || "Please find the scanned document as requested.") ||
+    "Please find the scanned document as requested."
+  );
 }
 
 /** A download URL means the file is being delivered through Google Drive. */
 export function usesDriveLinks(files: EmailFile[]): boolean {
   return files.some((file) => Boolean(file.url));
 }
-
 function extensionLabel(name: string): string {
   const match = /\.([a-z0-9]{1,5})$/i.exec(name);
   return (match?.[1] ?? "FILE").toUpperCase().slice(0, 5);

@@ -12,7 +12,11 @@ export const GMAIL_MESSAGE_LIMIT_BYTES = 25 * 1024 * 1024;
  */
 export const DRIVE_FALLBACK_RAW_BYTES = 19 * 1024 * 1024;
 
-export function getSendProgressLabel(pct: number, fileCount: number, useDriveLinks: boolean): string {
+export function getSendProgressLabel(
+  pct: number,
+  fileCount: number,
+  useDriveLinks: boolean,
+): string {
   if (pct < 10) return "Reading files…";
   if (pct < 75) {
     if (!useDriveLinks) return "Preparing attachments…";

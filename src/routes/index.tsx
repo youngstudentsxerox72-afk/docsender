@@ -26,7 +26,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
-import { fileToBase64, formatBytes, DRIVE_FALLBACK_RAW_BYTES, guessMime } from "@/lib/files";
+import {
+  fileToBase64,
+  formatBytes,
+  DRIVE_FALLBACK_RAW_BYTES,
+  getSendProgressLabel,
+  guessMime,
+} from "@/lib/files";
 import { sendDocument } from "@/lib/gmail.functions";
 import { applySubjectTemplate, DEFAULT_SETTINGS, fetchSettings } from "@/lib/settings";
 
@@ -202,14 +208,7 @@ function Dashboard() {
       const elapsed = (Date.now() - started) / 1000;
       const ratio = elapsed / estimateSec;
       const pct = Math.min(97, Math.round(ratio < 1 ? ratio * 90 : 90 + (1 - Math.exp(-(ratio - 1))) * 7));
-      const label =
-        pct < 10
-          ? "Reading files…"
-          : pct < 75
-            ? overGmailLimit
-              ? `Uploading ${files.length} file${files.length > 1 ? "s" : ""} to Google Drive…`
-              : "Preparing attachments…"
-            : "Sending via Gmail…";
+      const label = getSendProgressLabel(pct, files.length, overGmailLimit);
       setProgress({ pct, label, elapsed: Math.round(elapsed), remaining: Math.max(0, Math.round(estimateSec - elapsed)) });
     }, 500);
     try {

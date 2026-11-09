@@ -46,6 +46,16 @@ function stripDriveNotice(value: string): string {
     .trim();
 }
 
+function getEmailIntro(value: string | null | undefined): string {
+  return stripDriveNotice(value || "Please find the scanned document as requested.") ||
+    "Please find the scanned document as requested.";
+}
+
+/** A download URL means the file is being delivered through Google Drive. */
+export function usesDriveLinks(files: EmailFile[]): boolean {
+  return files.some((file) => Boolean(file.url));
+}
+
 function extensionLabel(name: string): string {
   const match = /\.([a-z0-9]{1,5})$/i.exec(name);
   return (match?.[1] ?? "FILE").toUpperCase().slice(0, 5);
@@ -101,13 +111,11 @@ export function stripMessageFormatting(value: string): string {
  */
 export function buildEmailHtml(input: EmailTemplateInput): string {
   const senderName = escapeHtml(input.senderName || "Students Graphics");
-  const intro = formatMessageHtml(
-    stripDriveNotice(input.intro || "Please find the scanned document as requested."),
-  );
+  const intro = formatMessageHtml(getEmailIntro(input.intro));
   const ref = input.referenceNo ? escapeHtml(input.referenceNo) : "";
   const files = input.files.length ? input.files : [{ name: "document.pdf" }];
   const plural = files.length > 1;
-  const viaLink = files.some((f) => f.url);
+  const viaLink = usesDriveLinks(files);
 
   const footerBlock = input.footerSrc
     ? `<img src="${input.footerSrc}" alt="${senderName}" width="600" style="display:block;width:100%;max-width:600px;height:auto;border:0;" />`
@@ -167,11 +175,11 @@ ${viaLink ? `      <div style="background:#fff7e6;border:1px solid ${GOLD};borde
 
 export function buildPlainText(input: EmailTemplateInput): string {
   const plural = input.files.length > 1;
-  const viaLink = input.files.some((f) => f.url);
+  const viaLink = usesDriveLinks(input.files);
   return [
     "Dear Sir/Madam,",
     "",
-    stripMessageFormatting(stripDriveNotice(input.intro)),
+    stripMessageFormatting(getEmailIntro(input.intro)),
     "",
     viaLink ? DRIVE_NOTICE_EN : "",
     viaLink ? DRIVE_NOTICE_TA : "",

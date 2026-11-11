@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getGmailStatus } from "@/lib/gmail.functions";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
+import { isPhoneSignalFresh } from "@/lib/phonePresence";
 
 export function useGmailStatus(enabled = true) {
   const fn = useServerFn(getGmailStatus);
@@ -77,10 +78,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const lastSignal = data.heartbeat_at ? new Date(data.heartbeat_at).getTime() : 0;
-      const age = Date.now() - lastSignal;
       setPhoneStatus({
-        state: age >= -15_000 && age < 45_000 ? "active" : "locked",
+        state: isPhoneSignalFresh(data.heartbeat_at) ? "active" : "locked",
         code: data.pairing_code,
       });
     };

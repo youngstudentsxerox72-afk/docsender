@@ -8,3 +8,5 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- Phone-proximity locking uses a user-scoped `phone_presence` row and browser heartbeats; keep all presence reads/writes under authenticated row-level policies so the lock is account-isolated.

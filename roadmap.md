@@ -1,3 +1,3 @@
-- [ ] Add a mobile phone heartbeat page with an automatic timeout.
-- [ ] Lock all mailer screens when the phone heartbeat is missing or stale.
+- [x] Add a mobile phone heartbeat page with an automatic timeout.
+- [x] Lock all mailer screens when the phone heartbeat is missing or stale.
 - [ ] Verify phone activation and timeout behavior in the preview.

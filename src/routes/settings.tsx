@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, AlertTriangle, Loader2, Upload } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Loader2, Upload, Smartphone, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppShell, useGmailStatus } from "@/components/AppShell";
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { DEFAULT_SETTINGS, fetchSettings, saveSettings, type AppSettings } from "@/lib/settings";
 
 export const Route = createFileRoute("/settings")({
@@ -41,6 +42,7 @@ function SettingsPage() {
   const { data: gmail, isFetching: gmailLoading, refetch } = useGmailStatus(!!user);
   const [form, setForm] = useState<Omit<AppSettings, "user_id">>(DEFAULT_SETTINGS);
   const [saving, setSaving] = useState(false);
+  const [presenceBusy, setPresenceBusy] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
@@ -51,6 +53,57 @@ function SettingsPage() {
     enabled: !!user,
     queryFn: () => fetchSettings(user!.id),
   });
+
+  const { data: phonePresence } = useQuery({
+    queryKey: ["phone-presence", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      if (!user) return null;
+      const { data: presence, error } = await supabase
+        .from("phone_presence")
+        .select("pairing_code, heartbeat_at")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (error) throw error;
+      return presence;
+    },
+  });
+
+  const enablePhonePresence = async () => {
+    if (!user) return;
+    setPresenceBusy(true);
+    try {
+      const randomBytes = new Uint32Array(1);
+      crypto.getRandomValues(randomBytes);
+      const pairingCode = String(randomBytes[0] % 1_000_000).padStart(6, "0");
+      const { error } = await supabase.from("phone_presence").upsert(
+        { user_id: user.id, pairing_code: pairingCode, heartbeat_at: null },
+        { onConflict: "user_id" },
+      );
+      if (error) throw error;
+      await queryClient.invalidateQueries({ queryKey: ["phone-presence", user.id] });
+      toast.success("Phone presence turned on");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not turn on phone presence");
+    } finally {
+      setPresenceBusy(false);
+    }
+  };
+
+  const disablePhonePresence = async () => {
+    if (!user) return;
+    setPresenceBusy(true);
+    try {
+      const { error } = await supabase.from("phone_presence").delete().eq("user_id", user.id);
+      if (error) throw error;
+      await queryClient.invalidateQueries({ queryKey: ["phone-presence", user.id] });
+      toast.success("Phone presence turned off");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not turn off phone presence");
+    } finally {
+      setPresenceBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (data) {
@@ -90,6 +143,47 @@ function SettingsPage() {
   return (
     <AppShell>
       <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Phone presence lock</CardTitle>
+            <CardDescription>
+              Keep the mailer available only while your signed-in phone is actively connected. If its signal stops for 45 seconds, the computer shows the maintenance screen.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {phonePresence ? (
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
+                    <ShieldCheck className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <p className="font-medium">Phone lock is on</p>
+                    <p className="text-sm text-muted-foreground">On your phone, sign in to the same account and open <strong className="text-foreground">/phone</strong>.</p>
+                  </div>
+                </div>
+                <Button variant="outline" onClick={disablePhonePresence} disabled={presenceBusy}>
+                  {presenceBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Turn off phone lock
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
+                    <Smartphone className="h-5 w-5" />
+                  </span>
+                  <p className="max-w-2xl text-sm text-muted-foreground">Turn this on at the computer, then open /phone on your mobile and sign in to the same account. The computer will lock until the phone is active.</p>
+                </div>
+                <Button onClick={enablePhonePresence} disabled={presenceBusy}>
+                  {presenceBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Smartphone className="mr-2 h-4 w-4" />}
+                  Turn on phone lock
+                </Button>
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">Keep the phone page open and its screen awake. A browser may pause the signal when the phone is locked or the page is in the background.</p>
+          </CardContent>
+        </Card>
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Gmail connection</CardTitle>

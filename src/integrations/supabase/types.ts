@@ -50,6 +50,27 @@ export type Database = {
         }
         Relationships: []
       }
+      phone_presence: {
+        Row: {
+          heartbeat_at: string | null
+          pairing_code: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          heartbeat_at?: string | null
+          pairing_code: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          heartbeat_at?: string | null
+          pairing_code?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       send_history: {
         Row: {
           created_at: string

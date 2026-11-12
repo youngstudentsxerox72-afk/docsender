@@ -42,7 +42,7 @@ function SentPage() {
   const [q, setQ] = useState("");
 
   useEffect(() => {
-    if (!loading && !user) navigate({ to: "/auth" });
+    if (!loading && !user) navigate({ to: "/auth", search: { next: undefined } });
   }, [loading, user, navigate]);
 
   const query = useInfiniteQuery({

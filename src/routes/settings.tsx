@@ -45,7 +45,7 @@ function SettingsPage() {
   const [presenceBusy, setPresenceBusy] = useState(false);
 
   useEffect(() => {
-    if (!loading && !user) navigate({ to: "/auth" });
+    if (!loading && !user) navigate({ to: "/auth", search: { next: undefined } });
   }, [loading, user, navigate]);
 
   const { data } = useQuery({
@@ -75,7 +75,9 @@ function SettingsPage() {
     try {
       const randomBytes = new Uint32Array(1);
       crypto.getRandomValues(randomBytes);
-      const pairingCode = String(randomBytes[0] % 1_000_000).padStart(6, "0");
+      const randomValue = randomBytes.at(0);
+      if (randomValue === undefined) throw new Error("Could not create a phone pairing code.");
+      const pairingCode = String(randomValue % 1_000_000).padStart(6, "0");
       const { error } = await supabase.from("phone_presence").upsert(
         { user_id: user.id, pairing_code: pairingCode, heartbeat_at: null },
         { onConflict: "user_id" },

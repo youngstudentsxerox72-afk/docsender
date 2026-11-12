@@ -54,6 +54,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     | { state: "checking" | "disabled" | "active" | "locked" | "error"; code: string | null }
   >({ state: "checking", code: null });
   const [presenceRefresh, setPresenceRefresh] = useState(0);
+  const [disablingPhoneLock, setDisablingPhoneLock] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -107,6 +108,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       }
     };
 
+    const disablePhoneLock = async () => {
+      if (!user || disablingPhoneLock) return;
+      setDisablingPhoneLock(true);
+      const { error } = await supabase.from("phone_presence").delete().eq("user_id", user.id);
+      setDisablingPhoneLock(false);
+      if (error) {
+        setPhoneStatus({ state: "error", code: null });
+        return;
+      }
+      setPhoneStatus({ state: "disabled", code: null });
+    };
+
     return (
       <div className="flex min-h-screen items-center justify-center bg-muted/50 px-4 py-10">
         <div className="w-full max-w-lg space-y-5 text-center">
@@ -137,6 +150,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           )}
           {phoneStatus.state === "error" && (
             <Button variant="outline" onClick={() => setPresenceRefresh((value) => value + 1)}>Check again</Button>
+          )}
+          {phoneStatus.state === "locked" && phoneStatus.code && (
+            <Button variant="ghost" size="sm" onClick={() => void disablePhoneLock()} disabled={disablingPhoneLock}>
+              {disablingPhoneLock && <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />}
+              Turn off phone lock
+            </Button>
           )}
           <p className="text-xs text-muted-foreground">The phone page must stay open and awake. Phones may pause it when it is backgrounded or locked.</p>
         </div>
@@ -201,7 +220,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               className="text-primary-foreground/80 hover:bg-primary-foreground/10 hover:text-primary-foreground"
               onClick={async () => {
                 await supabase.auth.signOut();
-                navigate({ to: "/auth" });
+                navigate({ to: "/auth", search: { next: undefined } });
               }}
             >
               <LogOut className="mr-1.5 h-4 w-4" />

@@ -112,7 +112,7 @@ function Dashboard() {
   };
 
   useEffect(() => {
-    if (!loading && !user) navigate({ to: "/auth" });
+    if (!loading && !user) navigate({ to: "/auth", search: { next: undefined } });
   }, [loading, user, navigate]);
 
   const { data: settings = { user_id: "", ...DEFAULT_SETTINGS } } = useQuery({

@@ -32,7 +32,7 @@ function PhonePresencePage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!loading && !user) navigate({ to: "/auth" });
+    if (!loading && !user) navigate({ to: "/auth", search: { next: "/phone" } });
   }, [loading, user, navigate]);
 
   useEffect(() => {

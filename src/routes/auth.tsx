@@ -11,8 +11,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
 import { useAuth } from "@/hooks/useAuth";
+import { z } from "zod";
 
 export const Route = createFileRoute("/auth")({
+  validateSearch: z.object({ next: z.literal("/phone").optional() }),
   head: () => ({
     meta: [
       { title: "Sign in | Students Graphics Document Mailer" },
@@ -35,14 +37,15 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
+  const { next } = Route.useSearch();
   const { session, loading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!loading && session) navigate({ to: "/" });
-  }, [loading, session, navigate]);
+    if (!loading && session) navigate({ to: next ?? "/" });
+  }, [loading, session, navigate, next]);
 
   const signIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +56,7 @@ function AuthPage() {
       toast.error(error.message);
       return;
     }
-    navigate({ to: "/" });
+    navigate({ to: next ?? "/" });
   };
 
   const signUp = async (e: React.FormEvent) => {
@@ -81,7 +84,7 @@ function AuthPage() {
       return;
     }
     if (result.redirected) return;
-    navigate({ to: "/" });
+    navigate({ to: next ?? "/" });
   };
 
   return (

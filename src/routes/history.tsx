@@ -75,7 +75,7 @@ function HistoryPage() {
   const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
-    if (!loading && !user) navigate({ to: "/auth" });
+    if (!loading && !user) navigate({ to: "/auth", search: { next: undefined } });
   }, [loading, user, navigate]);
 
   const { data = [], isLoading } = useQuery({

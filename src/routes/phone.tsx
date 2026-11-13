@@ -52,14 +52,7 @@ function PhonePresencePage() {
     };
     const interval = window.setInterval(() => void sendHeartbeat(), 15_000);
     const onVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        void supabase
-          .from("phone_presence")
-          .update({ heartbeat_at: null })
-          .eq("user_id", user.id)
-          .eq("pairing_code", code);
-        setActive(false);
-      }
+      if (document.visibilityState === "visible") void sendHeartbeat();
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
